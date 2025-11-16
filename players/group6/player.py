@@ -86,21 +86,21 @@ class Player6(Player):
         self.position = snapshot.position
         self.flock = snapshot.flock
         helper_snapshots[self.id] = snapshot
-        
+
         # Update global set of animals in flocks
         global animals_in_flocks, animals_being_chased
         animals_in_flocks = set()
         for helper_snapshot in helper_snapshots.values():
             for animal in helper_snapshot.flock:
                 animals_in_flocks.add(animal)
-        
+
         # Clean up chase assignments for animals that are now in flocks
         animals_being_chased = {
-            animal: helper_id 
+            animal: helper_id
             for animal, helper_id in animals_being_chased.items()
             if animal not in animals_in_flocks
         }
-        
+
         return 0
 
     def _get_random_move(self) -> tuple[float, float]:
@@ -122,21 +122,27 @@ class Player6(Player):
             return Move(*self.move_towards(*self.ark_position))
 
         if self.is_flock_full():
-            print(f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark")
+            print(
+                f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark"
+            )
             return Move(*self.move_towards(*self.ark_position))
 
         # Try to obtain animal in current cell if flock not full
         cur_x, cur_y = int(self.position[0]), int(self.position[1])
         cellview = helper_snapshots[self.id].sight.get_cellview_at(cur_x, cur_y)
-        
+
         # Only look for FREE animals (not in anyone's flock and not being chased)
         global animals_in_flocks, animals_being_chased
         free_animals_here = cellview.animals - animals_in_flocks
-        unclaimed_animals_here = {a for a in free_animals_here if a not in animals_being_chased}
-        
+        unclaimed_animals_here = {
+            a for a in free_animals_here if a not in animals_being_chased
+        }
+
         if unclaimed_animals_here and not self.is_flock_full():
             random_animal = choice(tuple(unclaimed_animals_here))
-            print(f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}")
+            print(
+                f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}"
+            )
             return Obtain(random_animal)
 
         # Look for FREE and UNCLAIMED animals in visible cells to chase
@@ -144,29 +150,39 @@ class Player6(Player):
         candidates = []
         for cellview in helper_snapshots[self.id].sight:
             free_animals = cellview.animals - animals_in_flocks
-            unclaimed_animals = {a for a in free_animals if a not in animals_being_chased}
+            unclaimed_animals = {
+                a for a in free_animals if a not in animals_being_chased
+            }
             if unclaimed_animals:
-                dist = math.sqrt((cellview.x - self.position[0])**2 + (cellview.y - self.position[1])**2)
+                dist = math.sqrt(
+                    (cellview.x - self.position[0]) ** 2
+                    + (cellview.y - self.position[1]) ** 2
+                )
                 for animal in unclaimed_animals:
                     candidates.append((animal, cellview.x, cellview.y, dist))
-        
+
         if candidates:
             # Sort by distance and pick closest
             candidates.sort(key=lambda x: x[3])
             target_animal, tx, ty, _ = candidates[0]
-            
+
             # Only claim if I'm the closest helper to this animal
             should_claim = True
             for other_id, other_snapshot in helper_snapshots.items():
                 if other_id == self.id:
                     continue
-                other_dist = math.sqrt((tx - other_snapshot.position[0])**2 + (ty - other_snapshot.position[1])**2)
+                other_dist = math.sqrt(
+                    (tx - other_snapshot.position[0]) ** 2
+                    + (ty - other_snapshot.position[1]) ** 2
+                )
                 my_dist = candidates[0][3]
                 # If another helper is closer, or same distance but lower ID, don't claim
-                if other_dist < my_dist or (other_dist == my_dist and other_id < self.id):
+                if other_dist < my_dist or (
+                    other_dist == my_dist and other_id < self.id
+                ):
                     should_claim = False
                     break
-            
+
             if should_claim:
                 animals_being_chased[target_animal] = self.id  # Claim it
                 print(f"[Helper {self.id}] Chasing free animal at ({tx}, {ty})")
