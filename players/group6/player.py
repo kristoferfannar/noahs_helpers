@@ -3,11 +3,15 @@ from core.snapshots import HelperSurroundingsSnapshot
 from core.action import Action, Move, Obtain
 from core.message import Message
 from core.views.player_view import Kind
+from core.animal import Animal
 import math
 from random import random, choice
 
 helper_snapshots: dict[int, HelperSurroundingsSnapshot] = {}
-seen = set()
+# Track all animals that are currently in ANY helper's flock
+animals_in_flocks: set[Animal] = set()
+# Track animals being chased (animal -> helper_id)
+animals_being_chased: dict[Animal, int] = {}
 
 # global patrol strips for dynamic reassignment
 _PATROL_STRIPS: list[dict] = []
@@ -37,15 +41,9 @@ class Player6(Player):
             1, int(2 * self._vision_radius)
         )  # skip spacing between rows (e.g. 10)
 
-        # Effective waypoints: grid of points spaced by patrol_spacing vertically
-        waypoints_per_col = int(math.ceil(GRID_HEIGHT / self._patrol_spacing))
-        total_waypoints = GRID_WIDTH * waypoints_per_col
-
-        # assign contiguous columns so each helper covers roughly 1/num_helpers of waypoints
-        waypoints_per_helper = int(math.ceil(total_waypoints / max(1, num_helpers)))
-        cols_per_helper = max(
-            1, int(math.ceil(waypoints_per_helper / waypoints_per_col))
-        )
+        # Divide the grid width evenly among helpers
+        # With 10 helpers and width 1000, each gets ~100 columns
+        cols_per_helper = max(1, int(math.ceil(GRID_WIDTH / max(1, num_helpers))))
 
         # initialize global patrol strips (one per chunk of cols_per_helper)
         global _PATROL_STRIPS
@@ -85,7 +83,24 @@ class Player6(Player):
         self._move_distance = max(1, int(min(GRID_WIDTH, GRID_HEIGHT) * 0.01))
 
     def check_surroundings(self, snapshot: HelperSurroundingsSnapshot) -> int:
+        self.position = snapshot.position
+        self.flock = snapshot.flock
         helper_snapshots[self.id] = snapshot
+        
+        # Update global set of animals in flocks
+        global animals_in_flocks, animals_being_chased
+        animals_in_flocks = set()
+        for helper_snapshot in helper_snapshots.values():
+            for animal in helper_snapshot.flock:
+                animals_in_flocks.add(animal)
+        
+        # Clean up chase assignments for animals that are now in flocks
+        animals_being_chased = {
+            animal: helper_id 
+            for animal, helper_id in animals_being_chased.items()
+            if animal not in animals_in_flocks
+        }
+        
         return 0
 
     def _get_random_move(self) -> tuple[float, float]:
@@ -103,46 +118,72 @@ class Player6(Player):
             return None
 
         if helper_snapshots[self.id].is_raining:
+            print(f"[Helper {self.id}] Rain detected, returning to ark")
             return Move(*self.move_towards(*self.ark_position))
 
         if self.is_flock_full():
+            print(f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark")
             return Move(*self.move_towards(*self.ark_position))
 
-        cellview = helper_snapshots[self.id].sight.get_cellview_at(
-            *tuple(map(int, self.position))
-        )
-        if len(cellview.animals) > 0:
-            random_animal = choice(tuple(cellview.animals))
-            # mark as seen/captured to avoid duplicate chasing of same spec/gender
-            seen.add((random_animal.species_id, random_animal.gender))
-            if seen:
-                print(seen)
+        # Try to obtain animal in current cell if flock not full
+        cur_x, cur_y = int(self.position[0]), int(self.position[1])
+        cellview = helper_snapshots[self.id].sight.get_cellview_at(cur_x, cur_y)
+        
+        # Only look for FREE animals (not in anyone's flock and not being chased)
+        global animals_in_flocks, animals_being_chased
+        free_animals_here = cellview.animals - animals_in_flocks
+        unclaimed_animals_here = {a for a in free_animals_here if a not in animals_being_chased}
+        
+        if unclaimed_animals_here and not self.is_flock_full():
+            random_animal = choice(tuple(unclaimed_animals_here))
+            print(f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}")
             return Obtain(random_animal)
 
+        # Look for FREE and UNCLAIMED animals in visible cells to chase
+        # Build list of candidates with distances
+        candidates = []
         for cellview in helper_snapshots[self.id].sight:
-            for animal in cellview.animals:
-                if (animal.species_id, animal.gender) not in seen:
-                    if self.can_move_to(cellview.x, cellview.y):
-                        # chase an animal (don't mark seen until we obtain it)
-                        return Move(cellview.x, cellview.y)
+            free_animals = cellview.animals - animals_in_flocks
+            unclaimed_animals = {a for a in free_animals if a not in animals_being_chased}
+            if unclaimed_animals:
+                dist = math.sqrt((cellview.x - self.position[0])**2 + (cellview.y - self.position[1])**2)
+                for animal in unclaimed_animals:
+                    candidates.append((animal, cellview.x, cellview.y, dist))
+        
+        if candidates:
+            # Sort by distance and pick closest
+            candidates.sort(key=lambda x: x[3])
+            target_animal, tx, ty, _ = candidates[0]
+            
+            # Only claim if I'm the closest helper to this animal
+            should_claim = True
+            for other_id, other_snapshot in helper_snapshots.items():
+                if other_id == self.id:
+                    continue
+                other_dist = math.sqrt((tx - other_snapshot.position[0])**2 + (ty - other_snapshot.position[1])**2)
+                my_dist = candidates[0][3]
+                # If another helper is closer, or same distance but lower ID, don't claim
+                if other_dist < my_dist or (other_dist == my_dist and other_id < self.id):
+                    should_claim = False
+                    break
+            
+            if should_claim:
+                animals_being_chased[target_animal] = self.id  # Claim it
+                print(f"[Helper {self.id}] Chasing free animal at ({tx}, {ty})")
+                return Move(*self.move_towards(tx, ty))
 
-        if self.is_flock_full():
-            return Move(*self.move_towards(*self.ark_position))
-
-        move = self.move_in_dir()
-        if move:
-            # print("This is what i wanted ", move)
-            return Move(*self.move_towards(move.x, move.y))
-        print("This is a random move")
+        # No animals in sight, patrol
+        print(f"[Helper {self.id}] No animals visible, patrolling from {self.position}")
+        target = self.move_in_dir()
+        if target:
+            return Move(*self.move_towards(*target))
         return Move(*self._get_random_move())
 
-    def move_in_dir(self) -> Move | None:
-        """Compute a location 1 km away in self.direction and
-        return a Move action to that location if it's reachable.
+    def move_in_dir(self) -> tuple[float, float] | None:
+        """Compute a target location for patrol movement.
 
         Returns:
-            Move | None: a Move action pointing to the computed cell, or None
-            if the cell is not reachable.
+            tuple[float, float] | None: target coordinates, or None if no target
         """
         # Patrol (boustrophedon) covering of assigned column strip using
         # vertical spacing determined by vision radius. This ensures near-
@@ -153,15 +194,9 @@ class Player6(Player):
 
             # if we are outside our assigned strip, move to the nearest boundary
             if cur_x < self._patrol_x_min:
-                tx, ty = self._patrol_x_min, cur_y
-                move = Move(*self.move_towards(tx, ty))
-                if self.can_move_to(move.x, move.y):
-                    return move
+                return (float(self._patrol_x_min), float(cur_y))
             if cur_x > self._patrol_x_max:
-                tx, ty = self._patrol_x_max, cur_y
-                move = Move(*self.move_towards(tx, ty))
-                if self.can_move_to(move.x, move.y):
-                    return move
+                return (float(self._patrol_x_max), float(cur_y))
 
             # target is the current row at the row-end depending on sweep direction
             row_y = int(max(0, min(GRID_HEIGHT - 1, self._patrol_row)))
@@ -198,36 +233,11 @@ class Player6(Player):
                 row_y = int(max(0, min(GRID_HEIGHT - 1, self._patrol_row)))
 
             # requested patrol target for this turn
-            tx, ty = int(end_x), int(row_y)
-            move = Move(*self.move_towards(tx, ty))
-            if self.can_move_to(move.x, move.y):
-                return move
-
-            # fallback attempts: move vertically to the patrol row (keep x),
-            # then try nearby columns inside the strip.
-            tx, ty = cur_x, int(row_y)
-            move = Move(*self.move_towards(tx, ty))
-            if self.can_move_to(move.x, move.y):
-                return move
-
-            for dx in (-2, -1, 1, 2):
-                test_x = int(
-                    max(self._patrol_x_min, min(self._patrol_x_max, cur_x + dx))
-                )
-                move = Move(*self.move_towards(test_x, row_y))
-                if self.can_move_to(move.x, move.y):
-                    return move
-
-            # if all patrol attempts fail, fallback to moving toward ark
-            return Move(*self.move_towards(*self.ark_position))
+            return (float(end_x), float(row_y))
 
         # if not in patrol mode, fallback to a short step along base direction
         distance = self._move_distance if hasattr(self, "_move_distance") else 1
         cur_x, cur_y = float(self.position[0]), float(self.position[1])
         target_x = cur_x + math.cos(self.direction) * distance
         target_y = cur_y + math.sin(self.direction) * distance
-        tx, ty = int(round(target_x)), int(round(target_y))
-        move = Move(*self.move_towards(tx, ty))
-        if self.can_move_to(move.x, move.y):
-            return move
-        return Move(*self.move_towards(*self.ark_position))
+        return (target_x, target_y)
