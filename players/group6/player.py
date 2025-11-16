@@ -1,7 +1,6 @@
 from core.player import Player
 from core.snapshots import HelperSurroundingsSnapshot
-from core.action import Action, Move, Obtain
-from core.message import Message
+from core.action import Move, Obtain
 from core.views.player_view import Kind
 from core.animal import Animal
 import math
@@ -32,76 +31,86 @@ class Player6(Player):
         species_populations: dict[str, int],
     ):
         super().__init__(id, ark_x, ark_y, kind, num_helpers, species_populations)
-        # base direction spread
-        self.direction = ((id + 1) / num_helpers) * 2 * math.pi % (2 * math.pi)
 
         # Coverage parameters
-        self._vision_radius = 5  # meters/cells
-        self._patrol_spacing = max(
-            1, int(2 * self._vision_radius)
-        )  # skip spacing between rows (e.g. 10)
+        self._patrol_spacing = 10  # skip spacing between rows
 
-        # Divide the grid width evenly among helpers
-        # With 10 helpers and width 1000, each gets ~100 columns
-        cols_per_helper = max(1, int(math.ceil(GRID_WIDTH / max(1, num_helpers))))
+        # Initialize global patrol strips if first helper
+        self._initialize_global_patrol_strips(num_helpers)
+        
+        # Assign this helper to a patrol strip
+        strip_index = self._claim_patrol_strip(id, num_helpers)
+        self._setup_patrol_parameters(id, strip_index)
 
-        # initialize global patrol strips (one per chunk of cols_per_helper)
+    def _initialize_global_patrol_strips(self, num_helpers: int) -> None:
+        """Create global patrol strips if not already initialized."""
         global _PATROL_STRIPS
-        if len(_PATROL_STRIPS) == 0:
-            # create strips covering the whole width
-            num_strips = int(math.ceil(GRID_WIDTH / cols_per_helper))
-            for si in range(num_strips):
-                x_min = int(si * cols_per_helper)
-                x_max = int(min(GRID_WIDTH - 1, (si + 1) * cols_per_helper - 1))
-                owner = si if si < num_helpers else None
-                _PATROL_STRIPS.append(
-                    {"x_min": x_min, "x_max": x_max, "owner": owner, "done": False}
-                )
+        if len(_PATROL_STRIPS) > 0:
+            return
 
-        # find this helper's initial strip (use id modulo if ids don't align)
-        my_strip_index = None
-        for i, s in enumerate(_PATROL_STRIPS):
-            if s["owner"] == id:
-                my_strip_index = i
-                break
-        if my_strip_index is None:
-            my_strip_index = id % len(_PATROL_STRIPS)
-            _PATROL_STRIPS[my_strip_index]["owner"] = id
+        cols_per_helper = max(1, int(math.ceil(GRID_WIDTH / max(1, num_helpers))))
+        num_strips = int(math.ceil(GRID_WIDTH / cols_per_helper))
+        
+        for si in range(num_strips):
+            x_min = int(si * cols_per_helper)
+            x_max = int(min(GRID_WIDTH - 1, (si + 1) * cols_per_helper - 1))
+            owner = si if si < num_helpers else None
+            _PATROL_STRIPS.append(
+                {"x_min": x_min, "x_max": x_max, "owner": owner, "done": False}
+            )
 
-        self._patrol_strip_index = my_strip_index
-        self._patrol_x_min = _PATROL_STRIPS[my_strip_index]["x_min"]
-        self._patrol_x_max = _PATROL_STRIPS[my_strip_index]["x_max"]
+    def _claim_patrol_strip(self, helper_id: int, num_helpers: int) -> int:
+        """Find and claim a patrol strip for this helper."""
+        global _PATROL_STRIPS
+        
+        # Try to find strip already assigned to this ID
+        for i, strip in enumerate(_PATROL_STRIPS):
+            if strip["owner"] == helper_id:
+                return i
+        
+        # Otherwise, claim strip based on ID
+        strip_index = helper_id % len(_PATROL_STRIPS)
+        _PATROL_STRIPS[strip_index]["owner"] = helper_id
+        return strip_index
 
-        # start at a staggered row so helpers are not all on same row at start
-        self._patrol_row = (id * self._patrol_spacing) % GRID_HEIGHT
-        self._patrol_row_step = max(1, int(self._patrol_spacing))
-        # sweep direction along rows: alternate by id for packing
-        self._patrol_dir = id % 2 == 0
+    def _setup_patrol_parameters(self, helper_id: int, strip_index: int) -> None:
+        """Initialize patrol parameters for the assigned strip."""
+        strip = _PATROL_STRIPS[strip_index]
+        
+        self._patrol_strip_index = strip_index
+        self._patrol_x_min = strip["x_min"]
+        self._patrol_x_max = strip["x_max"]
+        self._patrol_row = (helper_id * self._patrol_spacing) % GRID_HEIGHT
+        self._patrol_row_step = self._patrol_spacing
+        self._patrol_dir = helper_id % 2 == 0
         self._patrol_active = True
 
-        # how far to attempt to move each call (bigger -> faster coverage)
-        self._move_distance = max(1, int(min(GRID_WIDTH, GRID_HEIGHT) * 0.01))
-
     def check_surroundings(self, snapshot: HelperSurroundingsSnapshot) -> int:
+        self._update_snapshot(snapshot)
+        self._update_global_animal_tracking()
+        return 0
+
+    def _update_snapshot(self, snapshot: HelperSurroundingsSnapshot) -> None:
+        """Store the current snapshot and update position/flock."""
         self.position = snapshot.position
         self.flock = snapshot.flock
         helper_snapshots[self.id] = snapshot
 
-        # Update global set of animals in flocks
+    def _update_global_animal_tracking(self) -> None:
+        """Update global tracking of animals in flocks and being chased."""
         global animals_in_flocks, animals_being_chased
+        
+        # Rebuild set of all animals currently in any flock
         animals_in_flocks = set()
         for helper_snapshot in helper_snapshots.values():
-            for animal in helper_snapshot.flock:
-                animals_in_flocks.add(animal)
+            animals_in_flocks.update(helper_snapshot.flock)
 
-        # Clean up chase assignments for animals that are now in flocks
+        # Remove chase assignments for animals now in flocks
         animals_being_chased = {
             animal: helper_id
             for animal, helper_id in animals_being_chased.items()
             if animal not in animals_in_flocks
         }
-
-        return 0
 
     def _get_random_move(self) -> tuple[float, float]:
         old_x, old_y = self.position
@@ -112,47 +121,83 @@ class Player6(Player):
 
         return old_x + dx, old_y + dy
 
-    def get_action(self, messages: list[Message]) -> Action | None:
-        # noah shouldn't do anything
+    def get_action(self, messages) -> Move | Obtain | None:
         if self.kind == Kind.Noah:
             return None
 
+        if self._should_return_to_ark():
+            return self._return_to_ark()
+
+        # Try to obtain animal at current position
+        obtain_action = self._try_obtain_at_current_position()
+        if obtain_action:
+            return obtain_action
+
+        # Try to chase nearby animals
+        chase_action = self._try_chase_nearby_animal()
+        if chase_action:
+            return chase_action
+
+        # Default: patrol for animals
+        return self._patrol_for_animals()
+
+    def _should_return_to_ark(self) -> bool:
+        """Check if helper should return to ark (rain or full flock)."""
+        return helper_snapshots[self.id].is_raining or self.is_flock_full()
+
+    def _return_to_ark(self) -> Move:
+        """Return move action toward the ark."""
         if helper_snapshots[self.id].is_raining:
             print(f"[Helper {self.id}] Rain detected, returning to ark")
-            return Move(*self.move_towards(*self.ark_position))
+        else:
+            print(f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark")
+        return Move(*self.move_towards(*self.ark_position))
 
+    def _try_obtain_at_current_position(self) -> Obtain | None:
+        """Try to obtain an unclaimed animal at the current cell."""
         if self.is_flock_full():
-            print(
-                f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark"
-            )
-            return Move(*self.move_towards(*self.ark_position))
+            return None
 
-        # Try to obtain animal in current cell if flock not full
         cur_x, cur_y = int(self.position[0]), int(self.position[1])
         cellview = helper_snapshots[self.id].sight.get_cellview_at(cur_x, cur_y)
 
-        # Only look for FREE animals (not in anyone's flock and not being chased)
-        global animals_in_flocks, animals_being_chased
-        free_animals_here = cellview.animals - animals_in_flocks
-        unclaimed_animals_here = {
-            a for a in free_animals_here if a not in animals_being_chased
-        }
-
-        if unclaimed_animals_here and not self.is_flock_full():
-            random_animal = choice(tuple(unclaimed_animals_here))
-            print(
-                f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}"
-            )
+        unclaimed_animals = self._get_unclaimed_animals(cellview.animals)
+        if unclaimed_animals:
+            random_animal = choice(tuple(unclaimed_animals))
+            print(f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}")
             return Obtain(random_animal)
+        
+        return None
 
-        # Look for FREE and UNCLAIMED animals in visible cells to chase
-        # Build list of candidates with distances
+    def _get_unclaimed_animals(self, animals: set[Animal]) -> set[Animal]:
+        """Filter animals to only those not in flocks and not being chased."""
+        global animals_in_flocks, animals_being_chased
+        free_animals = animals - animals_in_flocks
+        return {a for a in free_animals if a not in animals_being_chased}
+
+    def _try_chase_nearby_animal(self) -> Move | None:
+        """Try to chase the closest unclaimed animal in sight."""
+        candidates = self._find_chase_candidates()
+        if not candidates:
+            return None
+
+        # Sort by distance and pick closest
+        candidates.sort(key=lambda x: x[3])
+        target_animal, tx, ty, _ = candidates[0]
+
+        # Only claim if this helper is closest to the animal
+        if self._is_closest_helper_to(tx, ty, candidates[0][3]):
+            animals_being_chased[target_animal] = self.id
+            print(f"[Helper {self.id}] Chasing free animal at ({tx}, {ty})")
+            return Move(*self.move_towards(tx, ty))
+        
+        return None
+
+    def _find_chase_candidates(self) -> list[tuple[Animal, int, int, float]]:
+        """Find all unclaimed animals in sight with their positions and distances."""
         candidates = []
         for cellview in helper_snapshots[self.id].sight:
-            free_animals = cellview.animals - animals_in_flocks
-            unclaimed_animals = {
-                a for a in free_animals if a not in animals_being_chased
-            }
+            unclaimed_animals = self._get_unclaimed_animals(cellview.animals)
             if unclaimed_animals:
                 dist = math.sqrt(
                     (cellview.x - self.position[0]) ** 2
@@ -160,37 +205,29 @@ class Player6(Player):
                 )
                 for animal in unclaimed_animals:
                     candidates.append((animal, cellview.x, cellview.y, dist))
+        return candidates
 
-        if candidates:
-            # Sort by distance and pick closest
-            candidates.sort(key=lambda x: x[3])
-            target_animal, tx, ty, _ = candidates[0]
+    def _is_closest_helper_to(self, x: int, y: int, my_distance: float) -> bool:
+        """Check if this helper is the closest to the given position."""
+        for other_id, other_snapshot in helper_snapshots.items():
+            if other_id == self.id:
+                continue
+            
+            other_dist = math.sqrt(
+                (x - other_snapshot.position[0]) ** 2
+                + (y - other_snapshot.position[1]) ** 2
+            )
+            
+            # Another helper is closer, or same distance but lower ID
+            if other_dist < my_distance or (other_dist == my_distance and other_id < self.id):
+                return False
+        
+        return True
 
-            # Only claim if I'm the closest helper to this animal
-            should_claim = True
-            for other_id, other_snapshot in helper_snapshots.items():
-                if other_id == self.id:
-                    continue
-                other_dist = math.sqrt(
-                    (tx - other_snapshot.position[0]) ** 2
-                    + (ty - other_snapshot.position[1]) ** 2
-                )
-                my_dist = candidates[0][3]
-                # If another helper is closer, or same distance but lower ID, don't claim
-                if other_dist < my_dist or (
-                    other_dist == my_dist and other_id < self.id
-                ):
-                    should_claim = False
-                    break
-
-            if should_claim:
-                animals_being_chased[target_animal] = self.id  # Claim it
-                print(f"[Helper {self.id}] Chasing free animal at ({tx}, {ty})")
-                return Move(*self.move_towards(tx, ty))
-
-        # No animals in sight, patrol
+    def _patrol_for_animals(self) -> Move:
+        """Move to patrol the grid searching for animals."""
         print(f"[Helper {self.id}] No animals visible, patrolling from {self.position}")
-        target = self.move_in_dir()
+        target = self._get_patrol_target()
         if target:
             return Move(*self.move_towards(*target))
         return Move(*self._get_random_move())
@@ -201,59 +238,75 @@ class Player6(Player):
         Returns:
             tuple[float, float] | None: target coordinates, or None if no target
         """
-        # Patrol (boustrophedon) covering of assigned column strip using
-        # vertical spacing determined by vision radius. This ensures near-
-        # complete coverage with minimal overlap between helpers.
-        if getattr(self, "_patrol_active", False):
-            cur_x = int(round(self.position[0]))
-            cur_y = int(round(self.position[1]))
+        return self._get_patrol_target()
 
-            # if we are outside our assigned strip, move to the nearest boundary
-            if cur_x < self._patrol_x_min:
-                return (float(self._patrol_x_min), float(cur_y))
-            if cur_x > self._patrol_x_max:
-                return (float(self._patrol_x_max), float(cur_y))
+    def _get_patrol_target(self) -> tuple[float, float] | None:
+        """Get the next target position for boustrophedon patrol pattern."""
+        if not getattr(self, "_patrol_active", False):
+            return None
 
-            # target is the current row at the row-end depending on sweep direction
+        cur_x = int(round(self.position[0]))
+        cur_y = int(round(self.position[1]))
+
+        # Move back to assigned strip if outside
+        if cur_x < self._patrol_x_min:
+            return (float(self._patrol_x_min), float(cur_y))
+        if cur_x > self._patrol_x_max:
+            return (float(self._patrol_x_max), float(cur_y))
+
+        # Calculate row target
+        row_y = int(max(0, min(GRID_HEIGHT - 1, self._patrol_row)))
+        end_x = self._patrol_x_max if self._patrol_dir else self._patrol_x_min
+
+        # Check if at end of current row - advance to next
+        if cur_x == end_x and cur_y == row_y:
+            self._advance_to_next_patrol_row()
+            # Recalculate after potential reassignment
+            if not self._patrol_active:
+                return None
             row_y = int(max(0, min(GRID_HEIGHT - 1, self._patrol_row)))
             end_x = self._patrol_x_max if self._patrol_dir else self._patrol_x_min
 
-            # if we are already at the end of the current sweep row, advance row
-            if cur_x == end_x and cur_y == row_y:
-                next_row = self._patrol_row + self._patrol_row_step
-                if next_row >= GRID_HEIGHT:
-                    # finished assigned area: mark strip done and try to reassign
-                    global _PATROL_STRIPS
-                    _PATROL_STRIPS[self._patrol_strip_index]["done"] = True
-                    _PATROL_STRIPS[self._patrol_strip_index]["owner"] = None
-                    # try to find another unfinished strip and take it
-                    reassigned = False
-                    for i, s in enumerate(_PATROL_STRIPS):
-                        if not s["done"] and s["owner"] is None:
-                            s["owner"] = self.id
-                            self._patrol_strip_index = i
-                            self._patrol_x_min = s["x_min"]
-                            self._patrol_x_max = s["x_max"]
-                            self._patrol_row = 0
-                            self._patrol_dir = i % 2 == 0
-                            self._patrol_active = True
-                            reassigned = True
-                            break
-                    if not reassigned:
-                        # no more strips left to help with
-                        self._patrol_active = False
-                        return None
-                self._patrol_row = next_row
-                self._patrol_dir = not self._patrol_dir
-                end_x = self._patrol_x_max if self._patrol_dir else self._patrol_x_min
-                row_y = int(max(0, min(GRID_HEIGHT - 1, self._patrol_row)))
+        return (float(end_x), float(row_y))
 
-            # requested patrol target for this turn
-            return (float(end_x), float(row_y))
+    def _advance_to_next_patrol_row(self) -> None:
+        """Advance patrol to next row, or reassign to new strip if finished."""
+        next_row = self._patrol_row + self._patrol_row_step
+        
+        if next_row >= GRID_HEIGHT:
+            self._finish_current_strip()
+            self._try_reassign_to_unfinished_strip()
+        else:
+            self._patrol_row = next_row
+            self._patrol_dir = not self._patrol_dir
 
-        # if not in patrol mode, fallback to a short step along base direction
-        distance = self._move_distance if hasattr(self, "_move_distance") else 1
-        cur_x, cur_y = float(self.position[0]), float(self.position[1])
-        target_x = cur_x + math.cos(self.direction) * distance
-        target_y = cur_y + math.sin(self.direction) * distance
-        return (target_x, target_y)
+    def _finish_current_strip(self) -> None:
+        """Mark current patrol strip as completed."""
+        global _PATROL_STRIPS
+        _PATROL_STRIPS[self._patrol_strip_index]["done"] = True
+        _PATROL_STRIPS[self._patrol_strip_index]["owner"] = None
+
+    def _try_reassign_to_unfinished_strip(self) -> None:
+        """Try to claim an unfinished patrol strip, or deactivate if none available."""
+        global _PATROL_STRIPS
+        
+        for i, strip in enumerate(_PATROL_STRIPS):
+            if not strip["done"] and strip["owner"] is None:
+                self._assign_to_strip(i)
+                return
+        
+        # No strips left - deactivate patrol
+        self._patrol_active = False
+
+    def _assign_to_strip(self, strip_index: int) -> None:
+        """Assign this helper to a specific patrol strip."""
+        global _PATROL_STRIPS
+        strip = _PATROL_STRIPS[strip_index]
+        
+        strip["owner"] = self.id
+        self._patrol_strip_index = strip_index
+        self._patrol_x_min = strip["x_min"]
+        self._patrol_x_max = strip["x_max"]
+        self._patrol_row = 0
+        self._patrol_dir = strip_index % 2 == 0
+        self._patrol_active = True
