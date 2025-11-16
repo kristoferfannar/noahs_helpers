@@ -37,7 +37,7 @@ class Player6(Player):
 
         # Initialize global patrol strips if first helper
         self._initialize_global_patrol_strips(num_helpers)
-        
+
         # Assign this helper to a patrol strip
         strip_index = self._claim_patrol_strip(id, num_helpers)
         self._setup_patrol_parameters(id, strip_index)
@@ -50,7 +50,7 @@ class Player6(Player):
 
         cols_per_helper = max(1, int(math.ceil(GRID_WIDTH / max(1, num_helpers))))
         num_strips = int(math.ceil(GRID_WIDTH / cols_per_helper))
-        
+
         for si in range(num_strips):
             x_min = int(si * cols_per_helper)
             x_max = int(min(GRID_WIDTH - 1, (si + 1) * cols_per_helper - 1))
@@ -62,12 +62,12 @@ class Player6(Player):
     def _claim_patrol_strip(self, helper_id: int, num_helpers: int) -> int:
         """Find and claim a patrol strip for this helper."""
         global _PATROL_STRIPS
-        
+
         # Try to find strip already assigned to this ID
         for i, strip in enumerate(_PATROL_STRIPS):
             if strip["owner"] == helper_id:
                 return i
-        
+
         # Otherwise, claim strip based on ID
         strip_index = helper_id % len(_PATROL_STRIPS)
         _PATROL_STRIPS[strip_index]["owner"] = helper_id
@@ -76,7 +76,7 @@ class Player6(Player):
     def _setup_patrol_parameters(self, helper_id: int, strip_index: int) -> None:
         """Initialize patrol parameters for the assigned strip."""
         strip = _PATROL_STRIPS[strip_index]
-        
+
         self._patrol_strip_index = strip_index
         self._patrol_x_min = strip["x_min"]
         self._patrol_x_max = strip["x_max"]
@@ -99,7 +99,7 @@ class Player6(Player):
     def _update_global_animal_tracking(self) -> None:
         """Update global tracking of animals in flocks and being chased."""
         global animals_in_flocks, animals_being_chased
-        
+
         # Rebuild set of all animals currently in any flock
         animals_in_flocks = set()
         for helper_snapshot in helper_snapshots.values():
@@ -150,7 +150,9 @@ class Player6(Player):
         if helper_snapshots[self.id].is_raining:
             print(f"[Helper {self.id}] Rain detected, returning to ark")
         else:
-            print(f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark")
+            print(
+                f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark"
+            )
         return Move(*self.move_towards(*self.ark_position))
 
     def _try_obtain_at_current_position(self) -> Obtain | None:
@@ -164,9 +166,11 @@ class Player6(Player):
         unclaimed_animals = self._get_unclaimed_animals(cellview.animals)
         if unclaimed_animals:
             random_animal = choice(tuple(unclaimed_animals))
-            print(f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}")
+            print(
+                f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}"
+            )
             return Obtain(random_animal)
-        
+
         return None
 
     def _get_unclaimed_animals(self, animals: set[Animal]) -> set[Animal]:
@@ -190,7 +194,7 @@ class Player6(Player):
             animals_being_chased[target_animal] = self.id
             print(f"[Helper {self.id}] Chasing free animal at ({tx}, {ty})")
             return Move(*self.move_towards(tx, ty))
-        
+
         return None
 
     def _find_chase_candidates(self) -> list[tuple[Animal, int, int, float]]:
@@ -212,16 +216,18 @@ class Player6(Player):
         for other_id, other_snapshot in helper_snapshots.items():
             if other_id == self.id:
                 continue
-            
+
             other_dist = math.sqrt(
                 (x - other_snapshot.position[0]) ** 2
                 + (y - other_snapshot.position[1]) ** 2
             )
-            
+
             # Another helper is closer, or same distance but lower ID
-            if other_dist < my_distance or (other_dist == my_distance and other_id < self.id):
+            if other_dist < my_distance or (
+                other_dist == my_distance and other_id < self.id
+            ):
                 return False
-        
+
         return True
 
     def _patrol_for_animals(self) -> Move:
@@ -272,7 +278,7 @@ class Player6(Player):
     def _advance_to_next_patrol_row(self) -> None:
         """Advance patrol to next row, or reassign to new strip if finished."""
         next_row = self._patrol_row + self._patrol_row_step
-        
+
         if next_row >= GRID_HEIGHT:
             self._finish_current_strip()
             self._try_reassign_to_unfinished_strip()
@@ -289,12 +295,12 @@ class Player6(Player):
     def _try_reassign_to_unfinished_strip(self) -> None:
         """Try to claim an unfinished patrol strip, or deactivate if none available."""
         global _PATROL_STRIPS
-        
+
         for i, strip in enumerate(_PATROL_STRIPS):
             if not strip["done"] and strip["owner"] is None:
                 self._assign_to_strip(i)
                 return
-        
+
         # No strips left - deactivate patrol
         self._patrol_active = False
 
@@ -302,7 +308,7 @@ class Player6(Player):
         """Assign this helper to a specific patrol strip."""
         global _PATROL_STRIPS
         strip = _PATROL_STRIPS[strip_index]
-        
+
         strip["owner"] = self.id
         self._patrol_strip_index = strip_index
         self._patrol_x_min = strip["x_min"]
