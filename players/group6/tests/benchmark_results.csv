@@ -1,0 +1,9 @@
+test_name,num_helpers,num_species,total_animals,density,ark_pos,score,execution_time,status
+helpers_10_species_16_density_100_ark_0_500,10,16,1600,100,"0,500",0,373.8780269622803,success
+helpers_2_species_16_density_100_ark_500_500,2,16,1600,100,"500,500",0,374.4925992488861,success
+helpers_5_species_16_density_100_ark_500_500,5,16,1600,100,"500,500",0,377.2832419872284,success
+helpers_10_species_16_density_100_ark_500_500,10,16,1600,100,"500,500",0,377.7417948246002,success
+helpers_10_species_16_density_100_ark_0_0,10,16,1600,100,"0,0",0,379.0728569030762,success
+helpers_20_species_16_density_100_ark_500_500,20,16,1600,100,"500,500",0,441.0835440158844,success
+helpers_50_species_16_density_100_ark_500_500,50,16,1600,100,"500,500",0,737.8095669746399,success
+helpers_100_species_16_density_100_ark_500_500,100,16,1600,100,"500,500",0,782.5179607868195,success

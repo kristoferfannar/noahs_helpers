@@ -19,6 +19,9 @@ _PATROL_STRIPS: list[dict] = []
 GRID_WIDTH = 1000
 GRID_HEIGHT = 1000
 
+# Debug flag: set to True to enable debug print output
+DEBUG = False
+
 
 class Player6(Player):
     def __init__(
@@ -147,12 +150,13 @@ class Player6(Player):
 
     def _return_to_ark(self) -> Move:
         """Return move action toward the ark."""
-        if helper_snapshots[self.id].is_raining:
-            print(f"[Helper {self.id}] Rain detected, returning to ark")
-        else:
-            print(
-                f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark"
-            )
+        if DEBUG:
+            if helper_snapshots[self.id].is_raining:
+                print(f"[Helper {self.id}] Rain detected, returning to ark")
+            else:
+                print(
+                    f"[Helper {self.id}] Flock full ({len(self.flock)}/4), returning to ark"
+                )
         return Move(*self.move_towards(*self.ark_position))
 
     def _try_obtain_at_current_position(self) -> Obtain | None:
@@ -166,9 +170,10 @@ class Player6(Player):
         unclaimed_animals = self._get_unclaimed_animals(cellview.animals)
         if unclaimed_animals:
             random_animal = choice(tuple(unclaimed_animals))
-            print(
-                f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}"
-            )
+            if DEBUG:
+                print(
+                    f"[Helper {self.id}] Attempting Obtain at ({cur_x}, {cur_y}), flock: {len(self.flock)}"
+                )
             return Obtain(random_animal)
 
         return None
@@ -192,7 +197,8 @@ class Player6(Player):
         # Only claim if this helper is closest to the animal
         if self._is_closest_helper_to(tx, ty, candidates[0][3]):
             animals_being_chased[target_animal] = self.id
-            print(f"[Helper {self.id}] Chasing free animal at ({tx}, {ty})")
+            if DEBUG:
+                print(f"[Helper {self.id}] Chasing free animal at ({tx}, {ty})")
             return Move(*self.move_towards(tx, ty))
 
         return None
@@ -232,7 +238,8 @@ class Player6(Player):
 
     def _patrol_for_animals(self) -> Move:
         """Move to patrol the grid searching for animals."""
-        print(f"[Helper {self.id}] No animals visible, patrolling from {self.position}")
+        if DEBUG:
+            print(f"[Helper {self.id}] No animals visible, patrolling from {self.position}")
         target = self._get_patrol_target()
         if target:
             return Move(*self.move_towards(*target))
