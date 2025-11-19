@@ -465,7 +465,7 @@ class Player6(Player):
 
 
 """Comments2:
-    - prio score, check for needed animals
+    - priority score, check for needed animals
     - noah speaks every 10 turns, saying who’s rare and incomplete
     - helpers:
         - rarest in flock
