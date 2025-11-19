@@ -3,9 +3,8 @@ from core.snapshots import HelperSurroundingsSnapshot
 from core.action import Move, Obtain
 from core.views.player_view import Kind
 from core.animal import Animal, Gender
-from core.message import Message
 import math
-from random import random, choice
+from random import random
 
 helper_snapshots: dict[int, HelperSurroundingsSnapshot] = {}
 animals_in_flocks: set[Animal] = set()
@@ -20,7 +19,9 @@ GRID_HEIGHT = 1000
 DEBUG = False
 # communication globals
 ark_species_status: dict[int, dict] = {}  # species_id -> {male: bool, female: bool}
-reported_animals: dict[tuple[int, int], list[tuple[int, int]]] = {}  # (x,y) -> [(species_id, turn_seen)]
+reported_animals: dict[
+    tuple[int, int], list[tuple[int, int]]
+] = {}  # (x,y) -> [(species_id, turn_seen)]
 last_noah_broadcast_turn: int = -1
 
 # signal encoding constants
@@ -49,7 +50,7 @@ class Player6(Player):
             if isinstance(species_name, int):
                 species_id = species_name
             elif len(species_name) == 1 and species_name.isalpha():
-                species_id = ord(species_name.lower()) - ord('a')
+                species_id = ord(species_name.lower()) - ord("a")
             elif "_" in species_name:
                 species_id = int(species_name.split("_")[-1])
             else:
@@ -59,7 +60,7 @@ class Player6(Player):
                     # fallback: use hash or skip
                     continue
             self._species_id_populations[species_id] = pop
-        
+
         # initialize ark status tracking
         global ark_species_status
         if kind == Kind.Noah:
@@ -110,7 +111,7 @@ class Player6(Player):
     def check_surroundings(self, snapshot: HelperSurroundingsSnapshot) -> int:
         self._update_snapshot(snapshot)
         self._update_global_animal_tracking()
-        
+
         if self.kind == Kind.Noah:
             return self._noah_broadcast()
         else:
@@ -120,7 +121,7 @@ class Player6(Player):
         self.position = snapshot.position
         self.flock = snapshot.flock
         helper_snapshots[self.id] = snapshot
-        
+
         # Update ark status if we're at the ark
         if self.kind == Kind.Helper and self._at_ark():
             self._update_ark_status_from_ark(snapshot)
@@ -133,11 +134,11 @@ class Player6(Player):
         """Update global ark status when helper visits the ark."""
         global ark_species_status
         ark_animals = snapshot.sight.get_cellview_at(*self.ark_position).animals
-        
+
         for animal in ark_animals:
             if animal.species_id not in ark_species_status:
                 ark_species_status[animal.species_id] = {"male": False, "female": False}
-            
+
             if animal.gender == Gender.Male:
                 ark_species_status[animal.species_id]["male"] = True
             elif animal.gender == Gender.Female:
@@ -146,44 +147,53 @@ class Player6(Player):
     def _noah_broadcast(self) -> int:
         """noah broadcasts high-priority species that still need collection."""
         global last_noah_broadcast_turn, ark_species_status
-        
+
         # Update ark status
-        if self.id in helper_snapshots and hasattr(helper_snapshots[self.id], 'sight'):
-            ark_animals = helper_snapshots[self.id].sight.get_cellview_at(*self.ark_position).animals
+        if self.id in helper_snapshots and hasattr(helper_snapshots[self.id], "sight"):
+            ark_animals = (
+                helper_snapshots[self.id]
+                .sight.get_cellview_at(*self.ark_position)
+                .animals
+            )
             for animal in ark_animals:
                 if animal.species_id not in ark_species_status:
-                    ark_species_status[animal.species_id] = {"male": False, "female": False}
-                
+                    ark_species_status[animal.species_id] = {
+                        "male": False,
+                        "female": False,
+                    }
+
                 if animal.gender == Gender.Male:
                     ark_species_status[animal.species_id]["male"] = True
                 elif animal.gender == Gender.Female:
                     ark_species_status[animal.species_id]["female"] = True
-        
+
         # Broadcast every 10 turns
         if self.id in helper_snapshots:
             current_turn = helper_snapshots[self.id].time_elapsed
         else:
             return 0
-            
+
         if current_turn - last_noah_broadcast_turn < 10:
             return 0
-        
+
         last_noah_broadcast_turn = current_turn
-        
+
         # Find rarest incomplete species
         incomplete_species = []
         for species_id, population in self._species_id_populations.items():
-            status = ark_species_status.get(species_id, {"male": False, "female": False})
+            status = ark_species_status.get(
+                species_id, {"male": False, "female": False}
+            )
             if not (status["male"] and status["female"]):
                 incomplete_species.append((population, species_id))
-        
+
         if not incomplete_species:
             return 0
-        
+
         # Broadcast the rarest incomplete species (lowest population count)
         incomplete_species.sort()
         rarest_species_id = incomplete_species[0][1]
-        
+
         # Encode: signal type (2 bits) + species_id (6 bits)
         # This allows up to 64 different species
         signal = (SIGNAL_ARK_STATUS << 6) | (rarest_species_id & 0x3F)
@@ -192,50 +202,51 @@ class Player6(Player):
     def _helper_broadcast(self) -> int:
         """helper broadcasts which species they're currently pursuing or carrying."""
         snapshot = helper_snapshots[self.id]
-        
+
         # Priority 1: If we have animals in flock, broadcast the rarest one
         if len(self.flock) > 0:
-            rarest_in_flock = min(self.flock, 
-                                   key=lambda a: self._get_species_priority(a.species_id))
+            rarest_in_flock = min(
+                self.flock, key=lambda a: self._get_species_priority(a.species_id)
+            )
             # Signal: "I'm carrying species X"
             signal = (SIGNAL_ANIMAL_SIGHTING << 6) | (rarest_in_flock.species_id & 0x3F)
             return signal
-        
+
         # Priority 2: If we're chasing something, broadcast what we're chasing
         for animal, chaser_id in animals_being_chased.items():
             if chaser_id == self.id:
                 signal = (SIGNAL_ANIMAL_SIGHTING << 6) | (animal.species_id & 0x3F)
                 return signal
-        
+
         # priority 3: broadcast the most valuable unclaimed animal we can see
         best_animal = None
-        best_priority = float('inf')
-        
+        best_priority = float("inf")
+
         for cellview in snapshot.sight:
             for animal in cellview.animals:
                 # Skip if already claimed
                 if animal in animals_in_flocks or animal in animals_being_chased:
                     continue
-                
+
                 priority = self._get_species_priority(animal.species_id)
                 if priority < best_priority:
                     best_priority = priority
                     best_animal = animal
-        
+
         if best_animal is not None:
             signal = (SIGNAL_ANIMAL_SIGHTING << 6) | (best_animal.species_id & 0x3F)
             return signal
-        
+
         # Nothing to report
         return 0
 
     def _get_species_priority(self, species_id: int) -> float:
         """Calculate priority for a species (lower = higher priority)."""
         global ark_species_status
-        
+
         population = self._species_id_populations.get(species_id, 10)
         status = ark_species_status.get(species_id, {"male": False, "female": False})
-        
+
         # Highest priority: rare species not yet on ark
         if not status["male"] and not status["female"]:
             priority = population * 0.1
@@ -245,18 +256,24 @@ class Player6(Player):
         # Low priority: complete species
         else:
             priority = population * 10
-        
+
         # Extra boost if Noah is broadcasting this as priority
-        if hasattr(self, '_noah_priority_species') and self._noah_priority_species == species_id:
+        if (
+            hasattr(self, "_noah_priority_species")
+            and self._noah_priority_species == species_id
+        ):
             priority *= 0.5  # Make it even more attractive
-        
+
         # Slight penalty if other nearby helpers are already pursuing this species
-        if hasattr(self, '_other_helpers_pursuing'):
-            pursuing_count = sum(1 for s_id in self._other_helpers_pursuing.values() 
-                                if s_id == species_id)
+        if hasattr(self, "_other_helpers_pursuing"):
+            pursuing_count = sum(
+                1
+                for s_id in self._other_helpers_pursuing.values()
+                if s_id == species_id
+            )
             if pursuing_count > 0:
-                priority *= (1.0 + 0.2 * pursuing_count)
-        
+                priority *= 1.0 + 0.2 * pursuing_count
+
         return priority
 
     def _update_global_animal_tracking(self) -> None:
@@ -264,7 +281,7 @@ class Player6(Player):
         animals_in_flocks = set()
         for helper_snapshot in helper_snapshots.values():
             animals_in_flocks.update(helper_snapshot.flock)
-        
+
         animals_being_chased = {
             animal: helper_id
             for animal, helper_id in animals_being_chased.items()
@@ -301,25 +318,25 @@ class Player6(Player):
     def _process_messages(self, messages) -> None:
         """Process communication signals from other helpers and Noah."""
         # Track which species other helpers are working on
-        if not hasattr(self, '_other_helpers_pursuing'):
-            self._other_helpers_pursuing = {}  
-        
+        if not hasattr(self, "_other_helpers_pursuing"):
+            self._other_helpers_pursuing = {}
+
         for message in messages:
             sender_id = message.from_helper.id
             signal = message.contents
-            
+
             # Decode signal type (top 2 bits)
             signal_type = signal >> 6
             payload = signal & 0x3F  # Bottom 6 bits
-            
+
             if signal_type == SIGNAL_ARK_STATUS:
                 # Noah is broadcasting a priority species
                 priority_species_id = payload
                 # Store this as a temporary boost for decision-making
-                if not hasattr(self, '_noah_priority_species'):
+                if not hasattr(self, "_noah_priority_species"):
                     self._noah_priority_species = None
                 self._noah_priority_species = priority_species_id
-                
+
             elif signal_type == SIGNAL_ANIMAL_SIGHTING:
                 # Another helper is pursuing/carrying this species
                 species_id = payload
@@ -349,11 +366,15 @@ class Player6(Player):
         unclaimed_animals = self._get_unclaimed_animals(cellview.animals)
         if not unclaimed_animals:
             return None
-        
+
         # Prioritize by species rarity
-        best_animal = min(unclaimed_animals, key=lambda a: self._get_species_priority(a.species_id))
+        best_animal = min(
+            unclaimed_animals, key=lambda a: self._get_species_priority(a.species_id)
+        )
         if DEBUG:
-            print(f"[Helper {self.id}] Obtaining species_{best_animal.species_id} at ({cur_x}, {cur_y}), flock: {len(self.flock)}")
+            print(
+                f"[Helper {self.id}] Obtaining species_{best_animal.species_id} at ({cur_x}, {cur_y}), flock: {len(self.flock)}"
+            )
         return Obtain(best_animal)
 
     def _get_unclaimed_animals(self, animals: set[Animal]) -> set[Animal]:
@@ -367,13 +388,17 @@ class Player6(Player):
             return None
 
         # Sort by priority (rarity) first, then distance
-        candidates.sort(key=lambda x: (self._get_species_priority(x[0].species_id), x[3]))
+        candidates.sort(
+            key=lambda x: (self._get_species_priority(x[0].species_id), x[3])
+        )
         target_animal, tx, ty, dist = candidates[0]
 
         if self._is_closest_helper_to(tx, ty, dist):
             animals_being_chased[target_animal] = self.id
             if DEBUG:
-                print(f"[Helper {self.id}] Chasing species_{target_animal.species_id} at ({tx}, {ty})")
+                print(
+                    f"[Helper {self.id}] Chasing species_{target_animal.species_id} at ({tx}, {ty})"
+                )
             return Move(*self.move_towards(tx, ty))
 
         return None
@@ -399,14 +424,18 @@ class Player6(Player):
                 (x - other_snapshot.position[0]) ** 2
                 + (y - other_snapshot.position[1]) ** 2
             )
-            if other_dist < my_distance or (other_dist == my_distance and other_id < self.id):
+            if other_dist < my_distance or (
+                other_dist == my_distance and other_id < self.id
+            ):
                 return False
         return True
 
     def _patrol_for_animals(self) -> Move:
         """Move to patrol the grid searching for animals."""
         if DEBUG:
-            print(f"[Helper {self.id}] No animals visible, patrolling from {self.position}")
+            print(
+                f"[Helper {self.id}] No animals visible, patrolling from {self.position}"
+            )
         target = self._get_patrol_target()
         if target:
             return Move(*self.move_towards(*target))

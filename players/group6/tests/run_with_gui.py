@@ -12,9 +12,9 @@ script_dir = pathlib.Path(__file__).parent
 project_root = script_dir.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from core.runner import ArkRunner
-from players.group6.player import Player6
-from test_config import SEED, TIME_T
+from core.runner import ArkRunner  # noqa: E402
+from players.group6.player import Player6  # noqa: E402
+from test_config import SEED, TIME_T  # noqa: E402
 
 
 def main():
@@ -38,19 +38,19 @@ def main():
         default=None,
         help=f"Override random seed (default: {SEED} from test_config)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Find the map file
     maps_dir = script_dir / "test_maps"
     map_path = None
-    
+
     # Try as filename first
     if not args.map_file.endswith(".json"):
         map_path = maps_dir / f"{args.map_file}.json"
     else:
         map_path = maps_dir / args.map_file
-    
+
     # If not found, try as full path
     if not map_path.exists():
         map_path = pathlib.Path(args.map_file)
@@ -60,17 +60,17 @@ def main():
             for f in sorted(maps_dir.glob("*.json")):
                 print(f"  - {f.stem}")
             return 1
-    
+
     # Load map configuration
     with open(map_path, "r") as f:
         map_data = json.load(f)
-    
+
     num_helpers = map_data["num_helpers"]
     animals = map_data["animals"]
     ark = tuple(map_data["ark"])
     test_time = args.test_time if args.test_time is not None else TIME_T
     seed = args.seed if args.seed is not None else SEED
-    
+
     print("=" * 70)
     print("Running Benchmark Test with GUI")
     print("=" * 70)
@@ -85,14 +85,14 @@ def main():
     print()
     print("Starting GUI... (close window when done to see final score)")
     print()
-    
+
     # Set random seed
     random.seed(seed)
-    
+
     # Create runner and run with GUI
     runner = ArkRunner(Player6, num_helpers, animals, test_time, ark)
     score, times = runner.run_gui()
-    
+
     # Print results
     print()
     print("=" * 70)
@@ -110,10 +110,9 @@ def main():
     print(f"Compare this score ({score}) with the benchmark result for:")
     print(f"  {map_path.stem}")
     print()
-    
+
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
