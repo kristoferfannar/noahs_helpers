@@ -11,8 +11,9 @@ This directory contains the performance benchmarking test suite for the Group 6 
 - `generate_test_maps.py` - Generates JSON map files for test cases
 - `run_benchmarks.py` - Runs benchmarks in parallel
 - `format_results.py` - Formats and displays results
+- `run_with_gui.py` - Run individual tests with GUI visualization
 - `test_maps/` - Directory containing generated map JSON files
-- `benchmark_results.csv` - Output file with test results
+- `benchmark_results/` - Directory containing timestamped benchmark result files
 
 ## Usage
 
@@ -84,5 +85,20 @@ All tests use:
 
 ## Results
 
-Results are displayed in a formatted table and saved to `benchmark_results.csv` for easy comparison over time.
+Results are displayed in a formatted table and automatically saved to the `benchmark_results/` directory with a timestamped filename that includes:
+- Date and time: `YYYY-MM-DD_HH-MM-SS` format
+- Git commit hash: Short 8-character hash
+- Branch name: Current git branch (sanitized)
+
+**Filename format**: `results_<date>_<time>_<commit>_<branch>.csv`
+
+**Example**: `results_2024-01-15_14-30-00_509b8e27_benchmarks.csv`
+
+This allows you to:
+- Track performance changes over time
+- Compare results across different commits
+- Organize results by branch
+- Keep a complete history of benchmark runs
+
+Results are automatically organized in the `benchmark_results/` folder, making it easy to compare performance across different code versions and branches.
 

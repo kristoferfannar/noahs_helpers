@@ -48,6 +48,25 @@ def run_single_benchmark(map_path: pathlib.Path) -> Dict[str, Any]:
     animals = map_data["animals"]
     ark = tuple(map_data["ark"])
     
+    # Calculate total animals to detect extreme cases
+    total_animals = sum(animals)
+    num_species = len(animals)
+    
+    # Safety check: Skip extremely large test cases that are likely to hang
+    # These should have been removed by regenerate-maps, but check anyway
+    if total_animals > 100000 or num_species > 512:
+        return {
+            "test_name": map_path.stem,
+            "num_helpers": num_helpers,
+            "num_species": num_species,
+            "total_animals": total_animals,
+            "density": animals[0] if animals else 0,
+            "ark_pos": f"{ark[0]},{ark[1]}",
+            "score": 0,
+            "execution_time": 0,
+            "status": "skipped: extreme test case (too many animals/species). Run --regenerate-maps to fix.",
+        }
+    
     # Set random seed for reproducibility
     random.seed(SEED)
     
@@ -59,8 +78,6 @@ def run_single_benchmark(map_path: pathlib.Path) -> Dict[str, Any]:
         execution_time = time.time() - start_time
         
         # Calculate statistics
-        total_animals = sum(animals)
-        num_species = len(animals)
         density = animals[0] if animals else 0  # Assume same density per species
         
         return {
@@ -78,8 +95,8 @@ def run_single_benchmark(map_path: pathlib.Path) -> Dict[str, Any]:
         return {
             "test_name": map_path.stem,
             "num_helpers": num_helpers,
-            "num_species": len(animals),
-            "total_animals": sum(animals),
+            "num_species": num_species,
+            "total_animals": total_animals,
             "density": animals[0] if animals else 0,
             "ark_pos": f"{ark[0]},{ark[1]}",
             "score": 0,
