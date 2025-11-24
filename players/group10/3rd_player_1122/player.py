@@ -12,7 +12,6 @@ from shapely.geometry import Point, Polygon
 
 from shapely.plotting import (
     plot_polygon,
-
 )  # Available in shapely >= 2.1
 
 
