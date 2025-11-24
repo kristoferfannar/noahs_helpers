@@ -15,12 +15,13 @@ _HORIZONTAL_STRIPS: list[dict] = []
 
 # Lambda to define proportion of helpers patrolling horizontally (0.0 to 1.0)
 # Example: 20% horizontal, but at least 1 if num_helpers >= 5
-HORIZONTAL_HELPER_RATIO = lambda n: 0.5  # 0.04 if n >= 16 else 0.0
+HORIZONTAL_HELPER_RATIO = lambda n: 0.5 if n >= 50 else 0.1 if n >= 20 else 0.0
 
 GRID_WIDTH = 1000
 GRID_HEIGHT = 1000
 
 # Debug flag: set to True to enable debug print output
+# When False, all DEBUG level messages are suppressed
 DEBUG = False
 
 # Noah broadcast ratio: N determines the probability split
@@ -68,23 +69,25 @@ logger = logging.getLogger(__name__)
 noah_logger = logging.getLogger(f"{__name__}.noah")
 
 # Configure logging level and handler for general logger
-# Set to WARNING to hide helper broadcasts and debug messages (only show Noah's logs)
+# Level is controlled by DEBUG constant
 if not logger.handlers:
-    logger.setLevel(logging.WARNING)
+    log_level = logging.DEBUG if DEBUG else logging.WARNING
+    logger.setLevel(log_level)
     # Add a console handler to actually display the logs
     handler = logging.StreamHandler()
-    handler.setLevel(logging.WARNING)
+    handler.setLevel(log_level)
     formatter = logging.Formatter('%(levelname)s: %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
 # Configure separate logger for Noah's broadcasts
-# Set to DEBUG to show detailed ark knowledge and broadcast decisions
+# Level is controlled by DEBUG constant
 if not noah_logger.handlers:
-    noah_logger.setLevel(logging.DEBUG)
+    log_level = logging.DEBUG if DEBUG else logging.WARNING
+    noah_logger.setLevel(log_level)
     # Add a console handler for Noah's broadcasts
     noah_handler = logging.StreamHandler()
-    noah_handler.setLevel(logging.DEBUG)
+    noah_handler.setLevel(log_level)
     noah_formatter = logging.Formatter('NOAH: %(message)s')
     noah_handler.setFormatter(noah_formatter)
     noah_logger.addHandler(noah_handler)
