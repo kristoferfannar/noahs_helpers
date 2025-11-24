@@ -6,7 +6,6 @@ from core.views.player_view import Kind
 from core.animal import Gender
 from math import cos, sin, radians, hypot, ceil
 import core.constants as c
-import matplotlib.pyplot as plt
 
 from shapely.geometry import Point, Polygon
 
@@ -198,8 +197,6 @@ class IndependentPlayer(Player):
 
         if plot:
             plot_polygon(wedge)
-
-            plt.show()
 
         return wedge.area
 
