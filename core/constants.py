@@ -33,7 +33,7 @@ FEMALE_ANIMAL_COLOR = (240, 120, 120)
 
 SCREEN_WIDTH = 1400
 SCREEN_HEIGHT = 1000
-LANDSCAPE_WIDTH = LANDSCAPE_HEIGHT = 800
+LANDSCAPE_WIDTH = LANDSCAPE_HEIGHT = 900
 
 MAP_PX = 300
 MAP_SPLIT = 10
@@ -65,8 +65,6 @@ INFO_HELPER_HEIGHT = 60
 
 # Precision
 EPS = 0.01
-<<<<<<< HEAD
-=======
 
 try:
     from . import _constants as local_constants  # type: ignore[import-not-found]
@@ -75,4 +73,3 @@ try:
         globals()[const] = getattr(local_constants, const)
 except ImportError:
     pass
->>>>>>> upstream/main
