@@ -182,9 +182,7 @@ def run_benchmarks_parallel(maps_dir: pathlib.Path, num_workers: int = None) -> 
         # tqdm not available, use simple progress updates
         with Pool(processes=num_workers) as pool:
             results = []
-            for i, result in enumerate(
-                pool.imap(run_single_benchmark, map_files), 1
-            ):
+            for i, result in enumerate(pool.imap(run_single_benchmark, map_files), 1):
                 results.append(result)
                 elapsed = time.time() - start_time
                 print(
