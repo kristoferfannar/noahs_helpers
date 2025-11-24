@@ -91,7 +91,7 @@ class Player6(Player):
                     "x_max": GRID_WIDTH - 1,
                     "owner": i,
                     "done": False,
-                    "region": "above"
+                    "region": "above",
                 }
             )
 
@@ -103,21 +103,21 @@ class Player6(Player):
                     "x_max": GRID_WIDTH - 1,
                     "owner": helpers_above + i,
                     "done": False,
-                    "region": "below"
+                    "region": "below",
                 }
             )
 
     def _claim_patrol_strip(self, helper_id: int, num_helpers: int) -> int:
         global _PATROL_STRIPS
-        
+
         # Initialize strips if not done yet
         if len(_PATROL_STRIPS) == 0:
             self._initialize_global_patrol_strips(num_helpers)
-        
+
         for i, strip in enumerate(_PATROL_STRIPS):
             if strip["owner"] == helper_id:
                 return i
-        
+
         # Shouldn't reach here since strips are pre-assigned
         return helper_id % len(_PATROL_STRIPS)
 
@@ -126,10 +126,10 @@ class Player6(Player):
         self._patrol_strip_index = strip_index
         self._patrol_x_min = strip["x_min"]
         self._patrol_x_max = strip["x_max"]
-        
+
         # Determine patrol region and starting row based on strip region
         ark_y = self.ark_position[1]
-        
+
         if strip.get("region") == "above":
             # Patrol from top toward ark
             # Distribute starting rows within the top region
@@ -146,11 +146,15 @@ class Player6(Player):
             helper_index_in_region = helper_id - helpers_above
             bottom_space = GRID_HEIGHT - ark_y
             rows_in_region = max(1, bottom_space)
-            row_spacing = max(1, rows_in_region // max(1, len(_PATROL_STRIPS) - helpers_above))
-            self._patrol_row = ark_y + (helper_index_in_region * row_spacing) % rows_in_region
+            row_spacing = max(
+                1, rows_in_region // max(1, len(_PATROL_STRIPS) - helpers_above)
+            )
+            self._patrol_row = (
+                ark_y + (helper_index_in_region * row_spacing) % rows_in_region
+            )
             self._patrol_row_step = self._patrol_spacing
             self._patrol_max_row = GRID_HEIGHT
-        
+
         self._patrol_dir = helper_id % 2 == 0
         self._patrol_active = True
 
@@ -431,7 +435,7 @@ class Player6(Player):
         global animals_in_flocks, animals_being_chased
         free_animals = animals - animals_in_flocks
         unclaimed = {a for a in free_animals if a not in animals_being_chased}
-        
+
         # Filter out animals we already have pairs of on the ark
         my_snapshot = helper_snapshots.get(self.id)
         if my_snapshot and my_snapshot.ark_view:
@@ -439,19 +443,26 @@ class Player6(Player):
             species_on_ark = {}
             for ark_animal in ark_animals:
                 if ark_animal.species_id not in species_on_ark:
-                    species_on_ark[ark_animal.species_id] = {"male": False, "female": False}
+                    species_on_ark[ark_animal.species_id] = {
+                        "male": False,
+                        "female": False,
+                    }
                 if ark_animal.gender == Gender.Male:
                     species_on_ark[ark_animal.species_id]["male"] = True
                 elif ark_animal.gender == Gender.Female:
                     species_on_ark[ark_animal.species_id]["female"] = True
-            
+
             # Only keep animals whose species doesn't have both genders on ark
             unclaimed = {
-                a for a in unclaimed
+                a
+                for a in unclaimed
                 if a.species_id not in species_on_ark
-                or not (species_on_ark[a.species_id]["male"] and species_on_ark[a.species_id]["female"])
+                or not (
+                    species_on_ark[a.species_id]["male"]
+                    and species_on_ark[a.species_id]["female"]
+                )
             }
-        
+
         return unclaimed
 
     def _try_chase_nearby_animal(self) -> Move | None:
@@ -594,7 +605,7 @@ class Player6(Player):
         self._patrol_strip_index = strip_index
         self._patrol_x_min = strip["x_min"]
         self._patrol_x_max = strip["x_max"]
-        
+
         # Set patrol boundaries based on region
         ark_y = self.ark_position[1]
         if strip.get("region") == "above":
@@ -603,7 +614,7 @@ class Player6(Player):
         else:
             self._patrol_row = ark_y
             self._patrol_max_row = GRID_HEIGHT
-        
+
         self._patrol_dir = strip_index % 2 == 0
         self._patrol_active = True
 
