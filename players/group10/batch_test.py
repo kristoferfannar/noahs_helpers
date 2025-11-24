@@ -16,28 +16,38 @@ os.chdir("../..")
 class ExperimentConfig:
     player: str
     num_helpers: int
-    animals: str          # space-separated ints, as in the shell script
+    animals: str  # space-separated ints, as in the shell script
     ark_x: int
     ark_y: int
     time: int
     seed: int
-    gui: bool = False     # batch mode: default to no GUI
+    gui: bool = False  # batch mode: default to no GUI
 
 
 def build_command(cfg: ExperimentConfig) -> List[str]:
     """Build the uv/main.py command for a given config."""
     cmd = [
-        "uv", "run", "main.py",
-        "--player", cfg.player,
-        "--num_helpers", str(cfg.num_helpers),
-        "--animals", *cfg.animals.split(),
-        "--ark", str(cfg.ark_x), str(cfg.ark_y),
-        "-T", str(cfg.time),
-        "--seed", str(cfg.seed),
+        "uv",
+        "run",
+        "main.py",
+        "--player",
+        cfg.player,
+        "--num_helpers",
+        str(cfg.num_helpers),
+        "--animals",
+        *cfg.animals.split(),
+        "--ark",
+        str(cfg.ark_x),
+        str(cfg.ark_y),
+        "-T",
+        str(cfg.time),
+        "--seed",
+        str(cfg.seed),
     ]
     if cfg.gui:
         cmd.append("--gui")
     return cmd
+
 
 def extract_metric(output: str) -> Optional[float]:
     """
@@ -47,7 +57,7 @@ def extract_metric(output: str) -> Optional[float]:
     patterns = [
         r"SCORE=\s*([0-9]+)",
     ]
-    #print(output)
+    # print(output)
     for pat in patterns:
         m = re.search(pat, output)
         if m:
@@ -98,6 +108,7 @@ def compare_with_previous(
     Compare the new metric with previous results for the same config.
     Prints a short summary.
     """
+
     # Identify "same config" rows by matching key fields
     def same_config(row: dict) -> bool:
         return (
@@ -129,14 +140,15 @@ def compare_with_previous(
 
     best_prev = max(prev_metrics)
     if metric is None:
-        print(f"  Previous best metric for this config: {best_prev:.3f} (new metric unavailable)")
+        print(
+            f"  Previous best metric for this config: {best_prev:.3f} (new metric unavailable)"
+        )
         return
 
     diff = metric - best_prev
     trend = "IMPROVED" if diff > 0 else ("TIED" if diff == 0 else "WORSE")
     print(
-        f"  Previous best: {best_prev:.3f}, new: {metric:.3f} "
-        f"({trend}, Δ={diff:+.3f})"
+        f"  Previous best: {best_prev:.3f}, new: {metric:.3f} ({trend}, Δ={diff:+.3f})"
     )
 
 
@@ -220,7 +232,7 @@ def main():
         new_rows.append(row)
 
     if new_rows:
-        #save_results(RESULTS_FILE, new_rows)
+        save_results(RESULTS_FILE, new_rows)
         print(f"\nSaved {len(new_rows)} new result rows to {RESULTS_FILE}")
 
 
