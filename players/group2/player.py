@@ -6,6 +6,7 @@ from core.player import Player
 from core.snapshots import HelperSurroundingsSnapshot
 from core.views.player_view import Kind
 from core.views.cell_view import CellView
+from core.animal import Gender
 
 
 def distance(x1: float, y1: float, x2: float, y2: float) -> float:
@@ -23,16 +24,29 @@ class Player2(Player):
         species_populations: dict[str, int],
     ):
         super().__init__(id, ark_x, ark_y, kind, num_helpers, species_populations)
-        print(f"I am {self}")
+        # print(f"I am {self}")
 
         self.is_raining = False
         self.hellos_received = []
         self.mode = "waiting"
-        self.direction = (0, 0)
+        # spread out initial direction outward from ark
+        self.direction = (ark_x + randint(-300, 300), ark_y + randint(-300, 300))
+
         self.internal_ark = set()
+        self.complete_species = set()
+
         self.countdown = 0
         self.rain = False
         self.timer = 1008
+
+        self.recent_positions = []  # Track last 50 positions
+        self.max_history = 50
+
+        # Grid-based exploration
+        # Scale down grid map into 100x100 cells (10x10 grid)
+        self.grid_size = 100
+        self.visited_cells = set()
+        self.current_target_cell = None
 
     def _get_my_cell(self) -> CellView:
         xcell, ycell = tuple(map(int, self.position))
@@ -40,6 +54,60 @@ class Player2(Player):
             raise Exception(f"{self} failed to find own cell")
 
         return self.sight.get_cellview_at(xcell, ycell)
+
+    def _get_next_grid_target(self) -> tuple[float, float]:
+        """Pick the next unvisited grid cell to explore"""
+        # Try to find an unvisited cell
+        # NOTE: can tune later this was arbitrarily picked for now
+        attempts = 0
+        max_attempts = 100
+
+        while attempts < max_attempts:
+            grid_x = randint(0, 9)
+            grid_y = randint(0, 9)
+
+            # Avoid visited cells + same cell we are already moving toward
+            if (grid_x, grid_y) in self.visited_cells or (
+                grid_x,
+                grid_y,
+            ) == self.current_target_cell:
+                attempts += 1
+                continue
+
+            # Valid new target
+            self.visited_cells.add((grid_x, grid_y))
+            self.current_target_cell = (grid_x, grid_y)
+            return self._get_grid_center(grid_x, grid_y)
+
+        # If most cells are visited then it's fine and we'll reset to allow revists
+        self.visited_cells.clear()
+        grid_x = randint(0, 9)
+        grid_y = randint(0, 9)
+        self.visited_cells.add((grid_x, grid_y))
+        self.current_target_cell = (grid_x, grid_y)
+        return self._get_grid_center(grid_x, grid_y)
+
+    def _get_grid_cell(self, x: float, y: float) -> tuple[int, int]:
+        """Convert a position to the scaled down 10x10 grid cell coordinates"""
+        grid_x = max(0, min(9, int(x // self.grid_size)))
+        grid_y = max(0, min(9, int(y // self.grid_size)))
+        return (grid_x, grid_y)
+
+    def _get_grid_center(self, grid_x: int, grid_y: int) -> tuple[float, float]:
+        """Get the center point of the scaled down 10x10 grid cell"""
+        center_x = grid_x * self.grid_size + self.grid_size // 2
+        center_y = grid_y * self.grid_size + self.grid_size // 2
+        return (center_x, center_y)
+
+    def animal_to_tuple(self, animal):
+        s_id = animal.species_id
+        if animal.gender == Gender.Male:
+            g = 0
+        elif animal.gender == Gender.Female:
+            g = 1
+        else:
+            g = 2
+        return (s_id, g)
 
     def _find_closest_animal(self) -> tuple[int, int] | None:
         closest_animal = None
@@ -49,7 +117,10 @@ class Player2(Player):
             if len(cellview.animals) > 0:
                 for animal in cellview.animals:
                     dist = distance(*self.position, cellview.x, cellview.y)
-                    if (animal.species_id, animal.gender) not in self.internal_ark:
+                    if (
+                        (animal.species_id, animal.gender) not in self.internal_ark
+                        and animal.species_id not in self.complete_species
+                    ):
                         if closest_animal is None:
                             closest_animal = animal
                             closest_dist = dist
@@ -66,10 +137,10 @@ class Player2(Player):
         count = 0
         while True:
             count += 1
-            dx, dy = randint(0, 1000), randint(0, 1000)
+            dx, dy = randint(0, 999), randint(0, 999)
             # print(dx, dy, count)
             # input()
-            if distance(dx, dy, self.ark_position[0], self.ark_position[0]) < 1000:
+            if distance(dx, dy, self.ark_position[0], self.ark_position[1]) < 1000:
                 break
 
         return dx, dy
@@ -84,13 +155,34 @@ class Player2(Player):
         self.sight = snapshot.sight
         self.is_raining = snapshot.is_raining
 
+        # Mark current grid cell(the scaled down 10x10 one that hosts 10 cells) as visited when exploring
+        if self.is_flock_empty():
+            current_grid = self._get_grid_cell(*self.position)
+            self.visited_cells.add(current_grid)
+
+        # Track when we're exploring (not when returning to ark with animals)
+        if self.is_flock_empty() or len(self.recent_positions) == 0:
+            self.recent_positions.append(self.position)
+            # Keep only the most recent positions
+            if len(self.recent_positions) > self.max_history:
+                self.recent_positions.pop(0)
+
+        # Clear some history when at ark to allow fresh exploration cycles(last 20 for now)
+        if snapshot.ark_view is not None and self.is_flock_empty():
+            # NOTE: tune later
+            if len(self.recent_positions) > 20:
+                self.recent_positions = self.recent_positions[-20:]
+
+        """Update internal arc information"""
         if snapshot.ark_view is not None:
             arc_animals = set()
             for animal in snapshot.ark_view.animals:
-                id_number, gender = animal.species_id, animal.gender
-                arc_animals.add((id_number, gender))
-            # print(snapshot.ark_view.animals)
+                arc_animals.add(self.animal_to_tuple(animal))
             self.internal_ark = arc_animals
+            for tuple in arc_animals:
+                s_id = tuple[0]
+                if (s_id, 0) in arc_animals and (s_id, 1) in arc_animals:
+                    self.complete_species.add(s_id)
 
         # if I didn't receive any messages, broadcast "hello"
         # a "hello" message is when a player's id bit is set
@@ -136,7 +228,7 @@ class Player2(Player):
                     self.ark_position[0],
                     self.ark_position[1],
                 )
-                <= 10
+                <= 20
             ):
                 self.mode = "get_back"
 
@@ -145,13 +237,15 @@ class Player2(Player):
 
         # If I have obtained an animal, go to ark
         if not self.is_flock_empty():
+            # Now heading to ark
+            self.direction = self.ark_position
             return Move(*self.move_towards(*self.ark_position))
 
         """If a helper checked and animal and noted it is already in the arc
         we use this function to force a 10 move walk"""
         if self.mode == "move_away":
             if self.countdown <= 0:
-                self.mode = "waiting"
+                self.mode = "moving"
             else:
                 self.countdown -= 1
                 return Move(*self.move_towards(*self.direction))
@@ -160,8 +254,11 @@ class Player2(Player):
         cellview = self._get_my_cell()
         if len(cellview.animals) > 0:
             for animal in cellview.animals:
-                if (animal.species_id, animal.gender) not in self.internal_ark:
-                    # # This means the random_player will even attempt to
+                if (
+                    (animal.species_id, animal.gender) not in self.internal_ark
+                    and animal.species_id not in self.complete_species
+                ):
+                    # # This means the random_player will even attempt t
                     # # (unsuccessfully) obtain animals in other helpers' flocks
                     # random_animal = choice(tuple(cellview.animals))
                     return Obtain(animal)
@@ -179,18 +276,31 @@ class Player2(Player):
             # animals in other helpers' flocks
             return Move(*self.move_towards(*closest_animal))
 
-        # Move in a random direction
+        # Systematic grid exploration
         if self.mode == "waiting":
-            direction = self._get_random_location()
+            # Pick a new grid cell to explore
+            direction = self._get_next_grid_target()
             self.mode = "moving"
             self.direction = direction
             return Move(*self.move_towards(*self.direction))
-
         else:
-            if self.position == self.direction or self.position == self.ark_position:
-                direction = self._get_random_location()
+            # Check if we've reached our target grid cell
+            if self.current_target_cell:
+                current_grid = self._get_grid_cell(*self.position)
+                if current_grid == self.current_target_cell:
+                    # Reached target, pick new cell
+                    direction = self._get_next_grid_target()
+                    self.mode = "moving"
+                    self.direction = direction
+                    return Move(*self.move_towards(*self.direction))
+
+            # Check if close to direction target
+            if distance(*self.position, *self.direction) < 10:
+                # Pick new grid cell
+                direction = self._get_next_grid_target()
                 self.mode = "moving"
                 self.direction = direction
                 return Move(*self.move_towards(*self.direction))
             else:
+                # Keep moving toward current target
                 return Move(*self.move_towards(*self.direction))
