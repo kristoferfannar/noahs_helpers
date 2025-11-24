@@ -54,6 +54,7 @@ class IndependentPlayer(Player):
         self.current_snapshot = None
         self.forced_return = False
         self.rain_start_turn: int | None = None
+        self.flock_limit:int = 2
 
         # Animal hunting state
         self.discovery_position = None  # Position where we discovered the animal
@@ -82,6 +83,11 @@ class IndependentPlayer(Player):
 
         self.inter = square.intersection(circle)
 
+        self.sector_start = id * 360/num_actual_helpers
+        self.sector_end = (id+1) *360/num_actual_helpers
+        self.current_target_angle = (self.sector_start+self.sector_end)/2
+        self.explored_angles = [self.current_target_angle]
+
 
 
         # For Noah (id=0), no sector assignment needed
@@ -101,51 +107,51 @@ class IndependentPlayer(Player):
 
             sector_boundaries = [0]
 
-            high = 360/num_actual_helpers
-            low = 0
             #binary seach section of exact size
-            for i in range(num_actual_helpers-1):
+            for i in range(id):
                 max_iter =0
-                temp_low = low
+                high = sector_boundaries[-1]+360/num_actual_helpers
+                low = sector_boundaries[-1]
+                temp_low = sector_boundaries[-1]
 
-                while(self.wedge_area(low, high, self.inter) < eq_area):
+                while(self.wedge_area(low, high, self.inter) < eq_area and high <=360):
                     high+=(high-low)
-                    temp_low = low + (high-low)/2
+                
+                high = min(high, 360)
                 
                 val = -1
                 
-                while(max_iter<20):
+                while(True):
                     mid = (high+temp_low)/2
                     val = self.wedge_area(low, mid, self.inter)
 
-                    if abs(eq_area - val)<1e-5:
-                        high = mid
+                    if abs(eq_area - val)<1e-5 or max_iter > 20:
+                        sector_boundaries+=[mid]
+                        if i == id-1:
+                            helper_index = id - 1
+
+                            self.sector_start = sector_boundaries[helper_index]%360
+                            self.sector_end = sector_boundaries[helper_index + 1]%360
+
+                            # Initial heading: center of assigned sector
+
+                            self.current_target_angle = (self.sector_start + self.sector_end) / 2
+                            self.explored_angles.append(self.current_target_angle)
+
                         break 
                     elif val > eq_area:
-                        high =  mid
+                        high = mid
                     else:
                         temp_low = mid 
                     
                     max_iter+=1
 
-                #print(high, val)
                 
-                sector_boundaries+=[high]
-                low = high
-                high = sector_boundaries[-1]+360/num_actual_helpers
-                
-            sector_boundaries+=[360]
 
+            
             #print(sector_boundaries)
             # Assign sector to this helper
-            helper_index = id - 1
-            self.sector_start = sector_boundaries[helper_index]%360
-            self.sector_end = sector_boundaries[helper_index + 1]%360
 
-            # Initial heading: center of assigned sector
-
-            self.current_target_angle = (self.sector_start + self.sector_end) / 2
-            self.explored_angles.append(self.current_target_angle)
 
 
             print("Helper", id, " ", self.wedge_area(self.sector_start, self.sector_end, self.inter, False), self.sector_start,self.sector_end)
@@ -168,8 +174,10 @@ class IndependentPlayer(Player):
             self.state = "at_ark"
 
 
-    def wedge_area(self, theta_start, theta_end, shape, plot = False, length = 1500):
- 
+    def wedge_area(self, theta_start, theta_end, shape, plot = False, length = 2000):
+
+        if(theta_end -theta_start>360):
+            return shape.area
         (cx, cy) = self.ark_position
         p0 = (cx, cy)
         # Endpoint along theta_start
@@ -179,13 +187,19 @@ class IndependentPlayer(Player):
         # Endpoint along theta_end
         p2 = (cx + length * cos(radians(theta_end)),
             cy + length * sin(radians(theta_end)))
+        
+        mid = (theta_start+theta_end)/2
+
+        p3 = (cx + length * cos(radians(mid)),
+            cy + length * sin(radians(mid)))
                 
-        triangle = Polygon([p0, p1, p2])
+        triangle = Polygon([p0, p1,  p3, p2 ])
         wedge = shape.intersection(triangle)
 
 
         if(plot):
             plot_polygon(wedge)
+
             plt.show()
         
         return wedge.area
@@ -251,11 +265,21 @@ class IndependentPlayer(Player):
         at_ark = (
             abs(current_x - self.ark_position[0]) <= c.EPS
             and abs(current_y - self.ark_position[1]) <= c.EPS
-        )
+        )   
+        dist_ark = hypot(current_x-self.ark_position[0], current_y-self.ark_position[1])
+
+        if self.rain_start_turn and dist_ark > 1008-(self.current_snapshot.time_elapsed-self.rain_start_turn):
+
+            print("Too far", self.id, dist_ark)
+
+
+        #if(self.current_snapshot.is_raining and (current_y !=  self.ark_position[1] or current_x != self.ark_position[0])):
+        #    print(self.id, at_ark, current_x, current_y, self.forced_return)
+
 
         # Priority 0 (HIGHEST): If forced to return due to time, override all other behaviors
         # This ensures all helpers return to ark before deadline
-        if self.forced_return and not at_ark:
+        if self.forced_return:
             # Cancel any hunting state
             if self.state in ("hunting", "returning_to_discovery"):
                 self.state = "returning"
@@ -265,11 +289,11 @@ class IndependentPlayer(Player):
                 self.previous_state = None
 
             # Force returning state
-            if self.state != "returning":
-                self.state = "returning"
+            self.state = "returning"
 
             # Immediately return to ark, no other actions
             return self._return_to_ark(snapshot)
+
 
         # Priority 1: Release animals that ark already has (to free space)
         if len(self.flock) > 0:
@@ -326,7 +350,7 @@ class IndependentPlayer(Player):
                     pass
 
         # Check if we have 2 animals (half capacity) and should return
-        if len(self.flock) >= 2:
+        if len(self.flock) >= self.flock_limit:
             self.state = "returning"
 
         # Check if we're at the ark and returning
@@ -466,7 +490,7 @@ class IndependentPlayer(Player):
                     self.target_species_id = None
                     self.discovery_position = None
                     # Decide next state based on flock size
-                    if len(self.flock) >= 2 or self.forced_return:
+                    if len(self.flock) >= self.flock_limit or self.forced_return:
                         self.state = "returning"
                     else:
                         self.state = (
@@ -559,7 +583,7 @@ class IndependentPlayer(Player):
     def _explore(self, snapshot: HelperSurroundingsSnapshot) -> Action | None:
         """Explore outward along current heading"""
         # Check if we should return to ark (already checked in get_action, but double-check here)
-        if len(self.flock) >= 2 or self.is_flock_full():
+        if len(self.flock) >= self.flock_limit or self.is_flock_full():
             self.state = "returning"
             return self._return_to_ark(snapshot)
 
@@ -607,6 +631,7 @@ class IndependentPlayer(Player):
         if (
             remaining_after_move <= self.safety_margin
             or turns_to_return_from_target + self.safety_margin > remaining_after_move
+            or distance_to_ark >= 1006
         ):
             self.state = "returning"
             self.forced_return = True
@@ -628,6 +653,9 @@ class IndependentPlayer(Player):
         # If we can't move further (edge case), return to ark
         self.state = "returning"
         return self._return_to_ark(snapshot)
+    
+    def _dist_to_ark(self, x, y):
+        return hypot(x-self.ark_position[0], y-self.ark_position[1])
 
     def _return_to_ark(self, snapshot: HelperSurroundingsSnapshot) -> Action | None:
         """
@@ -639,6 +667,7 @@ class IndependentPlayer(Player):
         ark_x, ark_y = self.ark_position
 
         if(self.forced_return):
+            #print(self.id, *self.move_towards(*self.ark_position))
             return Move(*self.move_towards(*self.ark_position))
 
         # Calculate direction to ark
@@ -697,7 +726,7 @@ class IndependentPlayer(Player):
                 target_y = current_y + dy * scale
 
         # Check if we can move to target using the same distance formula as can_move_to
-        if self.can_move_to(target_x,target_y):
+        if self.can_move_to(target_x,target_y) and self._dist_to_ark(target_x,target_y) < self._get_available_turns(self.current_snapshot):
             return Move(*self.move_towards(target_x,target_y))
 
         # If normal check failed but we're forced to return, try moving directly anyway
@@ -711,7 +740,9 @@ class IndependentPlayer(Player):
         """
         Move towards a specific position (not a cell). Returns a Move action if possible, None otherwise.
         """
-        
+        if self._dist_to_ark(target_x, target_y) > self._get_available_turns(snapshot):
+            return Move(*self.move_towards(*self.ark_position))
+
         return Move(*self.move_towards(target_x, target_y))
 
 
@@ -926,12 +957,12 @@ class IndependentPlayer(Player):
         if self.rain_start_turn is not None:
             # Rain has started - we know exactly how much time remains
             turns_since_rain = snapshot.time_elapsed - self.rain_start_turn
-            return max(0, c.START_RAIN - turns_since_rain)
+            return max(0, .99*(c.START_RAIN - turns_since_rain))
 
         # Rain has not started yet - we don't know when T is
         # Be optimistic and assume we have plenty of time to explore
         # Return a large number so helpers continue exploring
-        return 1006  # Effectively infinite before rain starts
+        return 10000  # Effectively infinite before rain starts
 
     def _sync_ark_information(self, snapshot: HelperSurroundingsSnapshot) -> None:
         """
