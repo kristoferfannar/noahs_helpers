@@ -236,8 +236,25 @@ class IndependentPlayer(Player):
 
         self.forced_return = forced_due_time
 
-        # Return message (0 = no message used)
+        current_turn = self.current_snapshot.time_elapsed
+
+        cell_x = int(current_x)
+        cell_y = int(current_y)
+
+        cell_view = snapshot.sight.get_cellview_at(cell_x, cell_y)
+
+        # if the flock is full and the helper sees an animal that the ark needs, it can broadcast it
+        # TODO in get_action: other helpers can move toward it  
+        #if self.is_flock_full:
+        for animal in cell_view.animals:
+            if animal.species_id not in self.ark_animals:
+                if current_turn % 2 == 0:
+                    return min(cell_x, 255) 
+                else:
+                    return min(cell_y, 255) 
         return 0
+                    
+        # Return message (0 = no message used)
 
     def get_action(self, messages: list[Message]) -> Action | None:
         """Decide what action to take this turn"""
@@ -424,6 +441,9 @@ class IndependentPlayer(Player):
                 target_found = False
                 nearest_target = None
                 nearest_distance = float("inf")
+
+                #for message in messages:
+                    #if current_turn % 2 == 0:
 
                 for cell_view in snapshot.sight:
                     for animal in cell_view.animals:
