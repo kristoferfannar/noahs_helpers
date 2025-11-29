@@ -1,5 +1,4 @@
 from core.player import Player
-from core.sight import Sight
 from core.snapshots import HelperSurroundingsSnapshot
 from core.action import Move, Obtain
 from core.views.player_view import Kind
@@ -31,12 +30,12 @@ NOAH_BROADCAST_INTERVAL = 10  # Broadcast every N turns
 PATROL_SPACING = 10
 
 # Priority calculation constants
-PRIORITY_MULTIPLIER_NONE = 0.5      # Species not on ark at all
+PRIORITY_MULTIPLIER_NONE = 0.5  # Species not on ark at all
 PRIORITY_MULTIPLIER_INCOMPLETE = 0.1  # Species missing one gender
-PRIORITY_MULTIPLIER_COMPLETE = 10.0   # Species already complete
-PRIORITY_NOAH_BOOST = 0.5            # Multiplier when Noah prioritizes
-PRIORITY_PURSUIT_PENALTY = 0.2       # Penalty per helper pursuing same species
-DEFAULT_POPULATION = 10              # Default if species not in populations dict
+PRIORITY_MULTIPLIER_COMPLETE = 10.0  # Species already complete
+PRIORITY_NOAH_BOOST = 0.5  # Multiplier when Noah prioritizes
+PRIORITY_PURSUIT_PENALTY = 0.2  # Penalty per helper pursuing same species
+DEFAULT_POPULATION = 10  # Default if species not in populations dict
 
 # Signal encoding constants
 SIGNAL_TYPE_HAVE = 0
@@ -63,7 +62,7 @@ if not logger.handlers:
     logger.setLevel(log_level)
     handler = logging.StreamHandler()
     handler.setLevel(log_level)
-    formatter = logging.Formatter('%(levelname)s: %(message)s')
+    formatter = logging.Formatter("%(levelname)s: %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -72,7 +71,7 @@ if not noah_logger.handlers:
     noah_logger.setLevel(log_level)
     noah_handler = logging.StreamHandler()
     noah_handler.setLevel(log_level)
-    noah_formatter = logging.Formatter('NOAH: %(message)s')
+    noah_formatter = logging.Formatter("NOAH: %(message)s")
     noah_handler.setFormatter(noah_formatter)
     noah_logger.addHandler(noah_handler)
 
@@ -87,15 +86,20 @@ _PATROL_STRIPS: list[dict] = []
 # HELPER FUNCTIONS
 # ============================================================================
 
+
 def _gender_to_string(gender: Gender) -> str:
     """Convert Gender enum to string representation."""
     return "Female" if gender == Gender.Female else "Male"
 
 
-def _encode_noah_message(species_id: int, gender: Gender, signal_type: int, 
-                         species_to_top64_id: dict[int, int]) -> int:
+def _encode_noah_message(
+    species_id: int,
+    gender: Gender,
+    signal_type: int,
+    species_to_top64_id: dict[int, int],
+) -> int:
     """Encode a Noah broadcast message.
-    
+
     Encoding: Bit 0=TYPE, Bit 1=GENDER, Bits 2-7=SPECIES
     """
     top64_id = species_to_top64_id[species_id]
@@ -119,6 +123,7 @@ def _build_verified_status(animals) -> dict[int, dict]:
 # ============================================================================
 # PLAYER CLASS
 # ============================================================================
+
 
 class Player6(Player):
     def __init__(
@@ -168,10 +173,10 @@ class Player6(Player):
             self._patrol_spacing = PATROL_SPACING
             strip_index = self._claim_patrol_strip(id, num_helpers)
             self._setup_patrol_parameters(id, strip_index)
-            
+
             # Track what other helpers are pursuing (from broadcasts)
             self._noah_priority_species: int | None = None
-            
+
             # Store ids of animals that appear to be in other helpers' flocks
             self._animals_seen_in_flocks: set[int] = set()
             self._max_distance_from_ark = 0
@@ -186,8 +191,9 @@ class Player6(Player):
             self._chase_attempts_by_key: dict[tuple[int, int, int], int] = {}
             self._covered_y_intervals: list[tuple[int, int]] = []
 
-
-    def _update_animals_seen_in_flocks(self, snapshot: HelperSurroundingsSnapshot) -> None:
+    def _update_animals_seen_in_flocks(
+        self, snapshot: HelperSurroundingsSnapshot
+    ) -> None:
         """Mark animals that appear to be in other helpers' flocks.
 
         Heuristic: any animals in a cell that contains at least one other helper
@@ -205,7 +211,7 @@ class Player6(Player):
             if any(helper.id != self.id for helper in cellview.helpers):
                 for animal in cellview.animals:
                     self._animals_seen_in_flocks.add(id(animal))
-    
+
     def _make_target_key(self, animal: Animal, tx: int, ty: int):
         """Stable key for a chase target: species, gender, and cluster.
 
@@ -213,7 +219,7 @@ class Player6(Player):
         """
         _, (col, row) = self._encode_cluster(tx, ty)
         return (animal.species_id, col, row)
-    
+
     def _extract_species_id(self, species_name) -> int | None:
         """Extract species_id from species name."""
         if isinstance(species_name, int):
@@ -227,7 +233,7 @@ class Player6(Player):
                 return int(species_name)
             except ValueError:
                 return None
-            
+
     def _encode_cluster(self, x: float, y: float) -> tuple[int, tuple[int, int]]:
         """Quantize (x, y) position into a 7-bit cluster id (16x8 grid)."""
         col = int(x // (GRID_WIDTH / 16))
@@ -254,47 +260,61 @@ class Player6(Player):
             return
 
         ark_y = self.ark_position[1]
-        
+
         # Divide helpers between regions above and below ark
         # Make sure both regions have at least 1 helper if possible
         helpers_above = max(1, int(round(num_helpers * ark_y / GRID_HEIGHT)))
         helpers_below = max(0, num_helpers - helpers_above)
-        
+
         # If we have 0 helpers below, redistribute
         if helpers_below == 0 and num_helpers > 1:
             helpers_above = num_helpers // 2
             helpers_below = num_helpers - helpers_above
-        
+
         # Create strips for above ark region
         if helpers_above > 0:
             strip_width_above = GRID_WIDTH / helpers_above
             for i in range(helpers_above):
                 x_min = int(i * strip_width_above)
-                x_max = int((i + 1) * strip_width_above - 1) if i < helpers_above - 1 else GRID_WIDTH - 1
-                _PATROL_STRIPS.append({
-                    "x_min": x_min,
-                    "x_max": x_max,
-                    "owner": i,
-                    "done": False,
-                    "region": "above",
-                })
+                x_max = (
+                    int((i + 1) * strip_width_above - 1)
+                    if i < helpers_above - 1
+                    else GRID_WIDTH - 1
+                )
+                _PATROL_STRIPS.append(
+                    {
+                        "x_min": x_min,
+                        "x_max": x_max,
+                        "owner": i,
+                        "done": False,
+                        "region": "above",
+                    }
+                )
 
         # Create strips for below ark region
         if helpers_below > 0:
             strip_width_below = GRID_WIDTH / helpers_below
             for i in range(helpers_below):
                 x_min = int(i * strip_width_below)
-                x_max = int((i + 1) * strip_width_below - 1) if i < helpers_below - 1 else GRID_WIDTH - 1
-                _PATROL_STRIPS.append({
-                    "x_min": x_min,
-                    "x_max": x_max,
-                    "owner": helpers_above + i,
-                    "done": False,
-                    "region": "below",
-                })
-        
-        logger.info(f"Created {len(_PATROL_STRIPS)} patrol strips: "
-                    f"{helpers_above} above ark, {helpers_below} below ark")
+                x_max = (
+                    int((i + 1) * strip_width_below - 1)
+                    if i < helpers_below - 1
+                    else GRID_WIDTH - 1
+                )
+                _PATROL_STRIPS.append(
+                    {
+                        "x_min": x_min,
+                        "x_max": x_max,
+                        "owner": helpers_above + i,
+                        "done": False,
+                        "region": "below",
+                    }
+                )
+
+        logger.info(
+            f"Created {len(_PATROL_STRIPS)} patrol strips: "
+            f"{helpers_above} above ark, {helpers_below} below ark"
+        )
 
     def _claim_patrol_strip(self, helper_id: int, num_helpers: int) -> int:
         global _PATROL_STRIPS
@@ -327,12 +347,16 @@ class Player6(Player):
             helper_index_in_region = helper_id - helpers_above
             bottom_space = GRID_HEIGHT - ark_y
             rows_in_region = max(1, bottom_space)
-            row_spacing = max(1, rows_in_region // max(1, len(_PATROL_STRIPS) - helpers_above))
-            self._patrol_row = ark_y + (helper_index_in_region * row_spacing) % rows_in_region
+            row_spacing = max(
+                1, rows_in_region // max(1, len(_PATROL_STRIPS) - helpers_above)
+            )
+            self._patrol_row = (
+                ark_y + (helper_index_in_region * row_spacing) % rows_in_region
+            )
             self._patrol_row_step = self._patrol_spacing
             self._patrol_max_row = GRID_HEIGHT
 
-        self._patrol_dir = (self._patrol_strip_index % 2 == 0)
+        self._patrol_dir = self._patrol_strip_index % 2 == 0
         self._patrol_active = True
 
     # ========================================================================
@@ -341,7 +365,7 @@ class Player6(Player):
 
     def check_surroundings(self, snapshot: HelperSurroundingsSnapshot) -> int:
         self._update_snapshot(snapshot)
-        
+
         # Update what animals we see in other helpers' flocks (no global state)
         if self.kind == Kind.Helper:
             self._update_safety_tracking(snapshot)
@@ -365,7 +389,9 @@ class Player6(Player):
         """Check if at the ark."""
         return (int(self.position[0]), int(self.position[1])) == self.ark_position
 
-    def _update_ark_beliefs_from_ark(self, snapshot: HelperSurroundingsSnapshot) -> None:
+    def _update_ark_beliefs_from_ark(
+        self, snapshot: HelperSurroundingsSnapshot
+    ) -> None:
         """Update ark beliefs when visiting the ark."""
         ark_animals = snapshot.sight.get_cellview_at(*self.ark_position).animals
 
@@ -377,7 +403,6 @@ class Player6(Player):
             elif animal.gender == Gender.Female:
                 self.ark_beliefs[animal.species_id]["female"] = True
 
-
     # ========================================================================
     # NOAH BROADCASTING
     # ========================================================================
@@ -387,9 +412,9 @@ class Player6(Player):
         if not self.snapshot:
             noah_logger.debug("No snapshot available")
             return 0
-        
+
         snapshot = self.snapshot
-        
+
         # Get actual ark animals
         if snapshot.ark_view is not None:
             actual_ark_animals = snapshot.ark_view.animals
@@ -398,7 +423,7 @@ class Player6(Player):
             actual_ark_animals = ark_cellview.animals
         else:
             return 0
-        
+
         # Update ark beliefs from actual animals
         for animal in actual_ark_animals:
             if animal.species_id not in self.ark_beliefs:
@@ -409,7 +434,7 @@ class Player6(Player):
                 self.ark_beliefs[animal.species_id]["female"] = True
 
         # Rate limit: broadcast every N turns
-        current_turn = snapshot.time_elapsed if hasattr(snapshot, 'time_elapsed') else 0
+        current_turn = snapshot.time_elapsed if hasattr(snapshot, "time_elapsed") else 0
         if current_turn - self.last_broadcast_turn < NOAH_BROADCAST_INTERVAL:
             return 0
         self.last_broadcast_turn = current_turn
@@ -421,12 +446,12 @@ class Player6(Player):
 
         # Build verified status
         verified_status = _build_verified_status(actual_ark_animals)
-        
+
         # Find first incomplete species
         first_incomplete_index = None
         first_incomplete_species_id = None
         first_incomplete_missing_genders = []
-        
+
         for idx, species_id in enumerate(self.top_64_species):
             status = verified_status.get(species_id, {"male": False, "female": False})
             if not (status["male"] and status["female"]):
@@ -437,14 +462,16 @@ class Player6(Player):
                 if not status["female"]:
                     first_incomplete_missing_genders.append(Gender.Female)
                 break
-        
+
         # If all complete, broadcast HAVE about any animal
         if first_incomplete_index is None:
             return self._broadcast_have_from_animals(actual_ark_animals)
-        
+
         # Probabilistic selection: HAVE (N-1)/N, NEED 1/N
-        broadcast_have = (current_turn % NOAH_BROADCAST_RATIO_N) < (NOAH_BROADCAST_RATIO_N - 1)
-        
+        broadcast_have = (current_turn % NOAH_BROADCAST_RATIO_N) < (
+            NOAH_BROADCAST_RATIO_N - 1
+        )
+
         if broadcast_have:
             # Broadcast HAVE about any animal at ark
             have_candidates = [
@@ -452,38 +479,62 @@ class Player6(Player):
                 for animal in actual_ark_animals
                 if animal.species_id in self.species_to_top64_id
             ]
-            
+
             if have_candidates:
                 self.completed_have_index %= len(have_candidates)
-                target_species_id, target_gender = have_candidates[self.completed_have_index]
-                self.completed_have_index = (self.completed_have_index + 1) % len(have_candidates)
-                
-                message = _encode_noah_message(target_species_id, target_gender, 
-                                              SIGNAL_TYPE_HAVE, self.species_to_top64_id)
-                noah_logger.info(f"HAVE: species_{target_species_id} ({_gender_to_string(target_gender)})")
+                target_species_id, target_gender = have_candidates[
+                    self.completed_have_index
+                ]
+                self.completed_have_index = (self.completed_have_index + 1) % len(
+                    have_candidates
+                )
+
+                message = _encode_noah_message(
+                    target_species_id,
+                    target_gender,
+                    SIGNAL_TYPE_HAVE,
+                    self.species_to_top64_id,
+                )
+                noah_logger.info(
+                    f"HAVE: species_{target_species_id} ({_gender_to_string(target_gender)})"
+                )
                 return message
             else:
                 return self._broadcast_have_from_animals(actual_ark_animals)
-        
+
         # Broadcast NEED
         if first_incomplete_missing_genders and first_incomplete_species_id is not None:
             # Check if all rarer species are complete
             all_rarer_complete = all(
-                verified_status.get(self.top_64_species[idx], {"male": False, "female": False}).get("male", False) and
-                verified_status.get(self.top_64_species[idx], {"male": False, "female": False}).get("female", False)
+                verified_status.get(
+                    self.top_64_species[idx], {"male": False, "female": False}
+                ).get("male", False)
+                and verified_status.get(
+                    self.top_64_species[idx], {"male": False, "female": False}
+                ).get("female", False)
                 for idx in range(first_incomplete_index)
             )
-            
+
             if all_rarer_complete:
                 self.broadcast_queue_index %= len(first_incomplete_missing_genders)
-                target_gender = first_incomplete_missing_genders[self.broadcast_queue_index]
-                self.broadcast_queue_index = (self.broadcast_queue_index + 1) % len(first_incomplete_missing_genders)
-                
-                message = _encode_noah_message(first_incomplete_species_id, target_gender, 
-                                              SIGNAL_TYPE_NEED, self.species_to_top64_id)
-                noah_logger.info(f"NEED: species_{first_incomplete_species_id} ({_gender_to_string(target_gender)})")
+                target_gender = first_incomplete_missing_genders[
+                    self.broadcast_queue_index
+                ]
+                self.broadcast_queue_index = (self.broadcast_queue_index + 1) % len(
+                    first_incomplete_missing_genders
+                )
+
+                message = _encode_noah_message(
+                    first_incomplete_species_id,
+                    target_gender,
+                    SIGNAL_TYPE_NEED,
+                    self.species_to_top64_id,
+                )
+                noah_logger.info(
+                    f"NEED: species_{first_incomplete_species_id} ({_gender_to_string(target_gender)})"
+                )
                 return message
-        
+
         # Fallback to HAVE
         return self._broadcast_have_from_animals(actual_ark_animals)
 
@@ -491,9 +542,15 @@ class Player6(Player):
         """Broadcast HAVE message from first available top 64 animal."""
         for animal in animals:
             if animal.species_id in self.species_to_top64_id:
-                message = _encode_noah_message(animal.species_id, animal.gender, 
-                                              SIGNAL_TYPE_HAVE, self.species_to_top64_id)
-                noah_logger.info(f"HAVE: species_{animal.species_id} ({_gender_to_string(animal.gender)})")
+                message = _encode_noah_message(
+                    animal.species_id,
+                    animal.gender,
+                    SIGNAL_TYPE_HAVE,
+                    self.species_to_top64_id,
+                )
+                noah_logger.info(
+                    f"HAVE: species_{animal.species_id} ({_gender_to_string(animal.gender)})"
+                )
                 return message
         return 0
 
@@ -526,10 +583,10 @@ class Player6(Player):
 
         self._process_messages(messages)
         self._current_claim = None
-        
+
         if self._should_return_to_ark():
             return self._return_to_ark()
-    
+
         obtain_action = self._try_obtain_at_current_position()
         if obtain_action:
             return obtain_action
@@ -560,21 +617,21 @@ class Player6(Player):
                 continue
 
             is_noah = sender_id == 0
-            
+
             if is_noah:
                 # Noah uses: Bit 0=TYPE, Bit 1=GENDER, Bits 2-7=SPECIES
                 signal_type = signal & 1
                 gender_bit = (signal >> 1) & 1
                 top64_id = (signal >> 2) & 0x3F
-                
+
                 if top64_id not in self.top64_id_to_species:
                     continue
-                    
+
                 species_id = self.top64_id_to_species[top64_id]
-                
+
                 if species_id not in self.ark_beliefs:
                     self.ark_beliefs[species_id] = {"male": False, "female": False}
-                
+
                 if signal_type == SIGNAL_TYPE_HAVE:
                     if gender_bit == 0:
                         self.ark_beliefs[species_id]["male"] = True
@@ -585,17 +642,20 @@ class Player6(Player):
                         self.ark_beliefs[species_id]["male"] = False
                     else:
                         self.ark_beliefs[species_id]["female"] = False
-                    
+
                     # NEED implies we HAVE all more common species
                     if species_id in self.top_64_species:
                         species_index = self.top_64_species.index(species_id)
                         for idx in range(species_index + 1, len(self.top_64_species)):
                             more_common_species_id = self.top_64_species[idx]
                             if more_common_species_id not in self.ark_beliefs:
-                                self.ark_beliefs[more_common_species_id] = {"male": False, "female": False}
+                                self.ark_beliefs[more_common_species_id] = {
+                                    "male": False,
+                                    "female": False,
+                                }
                             self.ark_beliefs[more_common_species_id]["male"] = True
                             self.ark_beliefs[more_common_species_id]["female"] = True
-                    
+
                     self._noah_priority_species = species_id
             else:
                 # Helper messages: bit 7 = claim flag, bits 6-0 = cluster
@@ -617,7 +677,6 @@ class Player6(Player):
 
     def _should_return_to_ark(self) -> bool:
         """Check if helper should return to ark."""
-        snapshot = self.snapshot
 
         # Always return if flock full
         if self.is_flock_full():
@@ -644,8 +703,6 @@ class Player6(Player):
             return True
 
         return False
-    
-
 
     def _return_to_ark(self) -> Move:
         """Return to ark."""
@@ -662,26 +719,30 @@ class Player6(Player):
             return None
 
         cur_x, cur_y = self.position[0], self.position[1]
-        
+
         # The helper is at float position (cur_x, cur_y)
         # Animals are located at integer cell coordinates
         # Check the cell we're in (using floor convention)
         cell_x = cur_x
         cell_y = cur_y
-        
+
         sight = self.snapshot.sight
         # Get animals in current cell
         if sight.cell_is_in_sight(int(cell_x), int(cell_y)):
             cellview = sight.get_cellview_at(int(cell_x), int(cell_y))
             valid_animals = {a for a in cellview.animals if a.gender != Gender.Unknown}
             unclaimed_animals = self._get_unclaimed_animals(valid_animals)
-        
+
             if not unclaimed_animals:
                 return None
-            best_animal = min(unclaimed_animals, 
-                            key=lambda a: self._get_species_priority(a.species_id))
-            logger.debug(f"[Helper {self.id}] Obtaining species_{best_animal.species_id} "
-                        f"at position ({cur_x:.2f}, {cur_y:.2f}) in cell ({cell_x}, {cell_y})")
+            best_animal = min(
+                unclaimed_animals,
+                key=lambda a: self._get_species_priority(a.species_id),
+            )
+            logger.debug(
+                f"[Helper {self.id}] Obtaining species_{best_animal.species_id} "
+                f"at position ({cur_x:.2f}, {cur_y:.2f}) in cell ({cell_x}, {cell_y})"
+            )
             target_key = self._make_target_key(best_animal, int(cell_x), int(cell_y))
             self._banned_targets.pop(target_key, None)
             self._chase_attempts_by_key.pop(target_key, None)
@@ -697,8 +758,10 @@ class Player6(Player):
                 continue
 
             # Skip if we already have this species/gender
-            if any(a.species_id == animal.species_id and a.gender == animal.gender 
-                for a in self.flock):
+            if any(
+                a.species_id == animal.species_id and a.gender == animal.gender
+                for a in self.flock
+            ):
                 continue
 
             # NEW: use ark_beliefs instead of only ark_view
@@ -725,8 +788,8 @@ class Player6(Player):
                     continue
                 # Treat helper as located at cellview.x, cellview.y
                 dist = math.sqrt(
-                    (cellview.x - self.position[0]) ** 2 +
-                    (cellview.y - self.position[1]) ** 2
+                    (cellview.x - self.position[0]) ** 2
+                    + (cellview.y - self.position[1]) ** 2
                 )
                 if dist < 1.5 and self.id > helper.id:
                     # We are the "loser" in this tie, so yield
@@ -754,14 +817,16 @@ class Player6(Player):
             self._current_target_turns = 0
             self._current_claim = None
             return None
-        
+
         candidates = self._find_chase_candidates()
         if not candidates:
             self._current_target_key = None
             self._current_target_turns = 0
             return None
 
-        candidates.sort(key=lambda x: (self._get_species_priority(x[0].species_id), x[3]))
+        candidates.sort(
+            key=lambda x: (self._get_species_priority(x[0].species_id), x[3])
+        )
 
         current_turn = getattr(self.snapshot, "time_elapsed", 0)
 
@@ -777,7 +842,7 @@ class Player6(Player):
             winner_id = self._cluster_claim_winners.get(key)
             if winner_id is not None and winner_id < self.id:
                 continue
-            
+
             # print(f"Helper {self.id}", self._current_target_key, target_key, self._current_target_turns)
 
             # How many total attempts have we made for this key (not just consecutively)?
@@ -807,7 +872,7 @@ class Player6(Player):
         self._current_target_turns = 0
         self._current_claim = None
         return None
-    
+
     def _find_chase_candidates(self) -> list[tuple[Animal, int, int, float]]:
         """Find all unclaimed animals in sight."""
         candidates = []
@@ -817,8 +882,8 @@ class Player6(Player):
             unclaimed = self._get_unclaimed_animals(cellview.animals)
             if unclaimed:
                 dist = math.sqrt(
-                    (cellview.x - self.position[0]) ** 2 +
-                    (cellview.y - self.position[1]) ** 2
+                    (cellview.x - self.position[0]) ** 2
+                    + (cellview.y - self.position[1]) ** 2
                 )
                 for animal in unclaimed:
                     target_key = self._make_target_key(animal, cellview.x, cellview.y)
@@ -830,7 +895,6 @@ class Player6(Player):
 
                     candidates.append((animal, cellview.x, cellview.y, dist))
         return candidates
-
 
     # ========================================================================
     # PRIORITY CALCULATION
@@ -864,14 +928,16 @@ class Player6(Player):
         if target:
             # Use Euclidean distance consistently
             target_distance = math.sqrt(
-                (target[0] - self.ark_position[0])**2 + 
-                (target[1] - self.ark_position[1])**2
+                (target[0] - self.ark_position[0]) ** 2
+                + (target[1] - self.ark_position[1]) ** 2
             )
-            
+
             if target_distance >= MAX_SAFE_DISTANCE - SAFETY_MARGIN:
-                logger.debug(f"[Helper {self.id}] Patrol target too far ({target_distance:.1f}), returning")
+                logger.debug(
+                    f"[Helper {self.id}] Patrol target too far ({target_distance:.1f}), returning"
+                )
                 return Move(*self.move_towards(*self.ark_position))
-        
+
             return Move(*self.move_towards(*target))
         logger.debug(f"Helper {self.id} FUCK getting random move")
         return Move(*self._get_random_move())
@@ -898,13 +964,15 @@ class Player6(Player):
         # Check if we've reached the end of current row (with tolerance for float comparison)
         at_end_x = abs(cur_x - end_x) < 0.5
         at_row_y = abs(cur_y - row_y) < 0.5
-        
+
         if at_end_x and at_row_y:
             self._advance_to_next_patrol_row()
             if not self._patrol_active:
                 return None
             row_y = float(max(0, min(GRID_HEIGHT - 1, self._patrol_row)))
-            end_x = float(self._patrol_x_max if self._patrol_dir else self._patrol_x_min)
+            end_x = float(
+                self._patrol_x_max if self._patrol_dir else self._patrol_x_min
+            )
 
         return (end_x, row_y)
 
@@ -920,7 +988,7 @@ class Player6(Player):
 
         while candidate < self._patrol_max_row:
             band_start = max(0, candidate - VISION_RADIUS)
-            band_end   = min(GRID_HEIGHT - 1, candidate + VISION_RADIUS)
+            band_end = min(GRID_HEIGHT - 1, candidate + VISION_RADIUS)
             if not self._is_band_fully_covered(band_start, band_end):
                 # This row adds new coverage; use it
                 self._patrol_row = candidate
@@ -991,44 +1059,43 @@ class Player6(Player):
                 if self._try_split_strip(i):
                     logger.debug(f"[Helper {self.id}] Split strip {i} to help")
                     return
-        
+
         # Absolutely everything explored - NOW restart own strip as last resort
         logger.debug(f"[Helper {self.id}] All areas explored, restarting own strip")
         self._restart_own_strip()
-
 
     def _try_split_strip(self, strip_index: int) -> bool:
         """Try to split a strip in half and take one half."""
         global _PATROL_STRIPS
         strip = _PATROL_STRIPS[strip_index]
-        
+
         # Only split if strip is wide enough (at least 20 units)
         strip_width = strip["x_max"] - strip["x_min"]
         if strip_width < 20:
             return False
-        
+
         # Split the strip in half
         mid_x = (strip["x_min"] + strip["x_max"]) // 2
-        
+
         # Original strip keeps left half
         old_x_max = strip["x_max"]
         strip["x_max"] = mid_x
-        
+
         # Create new strip for right half and assign to this helper
         new_strip = {
             "x_min": mid_x + 1,
             "x_max": old_x_max,
             "owner": self.id,
             "done": False,
-            "region": strip["region"]
+            "region": strip["region"],
         }
         _PATROL_STRIPS.append(new_strip)
-        
+
         # Assign ourselves to the new strip
         self._patrol_strip_index = len(_PATROL_STRIPS) - 1
         self._patrol_x_min = new_strip["x_min"]
         self._patrol_x_max = new_strip["x_max"]
-        
+
         ark_y = self.ark_position[1]
         if new_strip["region"] == "above":
             self._patrol_row = 0
@@ -1036,22 +1103,24 @@ class Player6(Player):
         else:
             self._patrol_row = ark_y
             self._patrol_max_row = GRID_HEIGHT
-        
+
         self._patrol_dir = self.id % 2 == 0
         self._patrol_active = True
-        
-        logger.info(f"[Helper {self.id}] Created new strip [{new_strip['x_min']}, {new_strip['x_max']}] "
-                    f"by splitting strip {strip_index}")
+
+        logger.info(
+            f"[Helper {self.id}] Created new strip [{new_strip['x_min']}, {new_strip['x_max']}] "
+            f"by splitting strip {strip_index}"
+        )
         return True
-    
+
     def _restart_own_strip(self) -> None:
         """Restart patrolling the current strip from the beginning (last resort)."""
         strip = _PATROL_STRIPS[self._patrol_strip_index]
-        
+
         # Reset strip as not done
         strip["done"] = False
         strip["owner"] = self.id
-        
+
         # Reset patrol parameters to start from beginning
         ark_y = self.ark_position[1]
         if strip.get("region") == "above":
@@ -1098,26 +1167,25 @@ class Player6(Player):
             dx, dy = random() - 0.5, random() - 0.5
 
         return old_x + dx, old_y + dy
-    
+
     # ========================================================================
     # SAFE RADIUS
     # ========================================================================
-    
+
     def _calculate_distance_to_ark(self) -> float:
         """Calculate Euclidean distance to ark (actual movement distance)."""
         dx = self.position[0] - self.ark_position[0]
         dy = self.position[1] - self.ark_position[1]
         return math.sqrt(dx * dx + dy * dy)
-    
 
     def _update_safety_tracking(self, snapshot: HelperSurroundingsSnapshot) -> None:
         """Track safety metrics each turn."""
         if self.kind != Kind.Helper:
             return
-        
+
         current_distance = self._calculate_distance_to_ark()
         self._max_distance_from_ark = max(self._max_distance_from_ark, current_distance)
-        
+
         # Detect rain start
         if snapshot.is_raining and not self._rain_started:
             self._rain_started = True
@@ -1130,7 +1198,6 @@ class Player6(Player):
                 f"Distance to ark: {self._distance_when_rain_started:.1f}, "
                 f"start_turn: {self._rain_start_turn}"
             )
-
 
     def _can_explore_more(self) -> int:
         """How many more turns we can still explore.
