@@ -243,17 +243,31 @@ class IndependentPlayer(Player):
 
         cell_view = snapshot.sight.get_cellview_at(cell_x, cell_y)
 
-        # if the flock is full and the helper sees an animal that the ark needs, it can broadcast it
-        # TODO in get_action: other helpers can move toward it  
+        # if the flock is full (commented right now, because the flock is rarely full)
+        # and the helper sees common animals but the ark doesn't have them, it can broadcast to tell other helpers to avoid the area
+        # return: helper's ID 
+        # TODO in get_action: other helpers move away
+        return_self_value = 0
+        common_animal_count = 0
+        mean_population = 0
+        count_populations = 0
+        count = 0
+
+        for animal in self.species_populations:
+            count_populations += self.species_populations[animal]
+            count += 1
+        mean_population = count_populations / count 
+
         #if self.is_flock_full:
-        for animal in cell_view.animals:
-            if animal.species_id not in self.ark_animals:
-                if current_turn % 2 == 0:
-                    return min(cell_x, 255) 
-                else:
-                    return min(cell_y, 255) 
-        return 0
-                    
+        for animal in cell_view.animals: 
+            if self.species_populations[str(animal._id_to_letter())] > mean_population: # common animal
+                common_animal_count += 1
+
+        if common_animal_count > 1: # 1 for now
+            return_self_value = self.id
+
+        return return_self_value
+        
         # Return message (0 = no message used)
 
     def get_action(self, messages: list[Message]) -> Action | None:
@@ -395,6 +409,9 @@ class IndependentPlayer(Player):
 
         # Priority 3: Handle returning to discovery position after catching animal
         if self.state == "returning_to_discovery":
+
+
+
             if self.discovery_position is not None:
                 disc_x, disc_y = self.discovery_position
                 # Check if we've reached the discovery position
@@ -423,7 +440,7 @@ class IndependentPlayer(Player):
                         )
                         # Immediately continue with resumed state
                         if self.state == "exploring":
-                            return self._explore(snapshot)
+                            return self._explore(snapshot, messages)
                         elif self.state == "returning":
                             return self._return_to_ark(snapshot)
                 else:
@@ -441,9 +458,6 @@ class IndependentPlayer(Player):
                 target_found = False
                 nearest_target = None
                 nearest_distance = float("inf")
-
-                #for message in messages:
-                    #if current_turn % 2 == 0:
 
                 for cell_view in snapshot.sight:
                     for animal in cell_view.animals:
@@ -579,7 +593,7 @@ class IndependentPlayer(Player):
 
         # Priority 6: If no animals in sight, continue exploring or returning
         if self.state == "exploring":
-            return self._explore(snapshot)
+            return self._explore(snapshot, messages)
         elif self.state == "returning":
             return self._return_to_ark(snapshot)
 
@@ -593,7 +607,18 @@ class IndependentPlayer(Player):
         if new_x <= 0 or new_x >= self.w or new_y <= 0 or new_y >= self.h:
             return True
 
-    def _explore(self, snapshot: HelperSurroundingsSnapshot) -> Action | None:
+    def _explore(self, snapshot: HelperSurroundingsSnapshot, messages) -> Action | None:
+
+
+        eliminated_directions = []
+
+        for message in messages:
+            for cell_view in snapshot.sight:
+                for helper in cell_view.helpers:
+                    if helper.id == message.contents:
+                        eliminated_directions.append([cell_view.x, cell_view.y])
+
+
         """Explore outward along current heading"""
         # Check if we should return to ark (already checked in get_action, but double-check here)
         if len(self.flock) >= self.flock_limit or self.is_flock_full():
