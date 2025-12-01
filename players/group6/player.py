@@ -47,7 +47,7 @@ SIGNAL_TYPE_NEED = 1
 MAX_CHASE_ATTEMPTS = 10
 CHASE_COOLDOWN_TURNS = 40  # or whatever you want
 MAX_SAFE_DISTANCE = 1008  # Maximum turns we can be from ark
-SAFETY_MARGIN = 10  # Extra safety buffer
+SAFETY_MARGIN = 50  # Extra safety buffer
 VISION_RADIUS = 5  # helper sight radius
 
 # ============================================================================
