@@ -269,6 +269,8 @@ class IndependentPlayer(Player):
         return return_self_value
         
         # Return message (0 = no message used)
+        # Return message (0 = no message used)
+        return 0
 
     def get_action(self, messages: list[Message]) -> Action | None:
         """Decide what action to take this turn"""
@@ -409,8 +411,6 @@ class IndependentPlayer(Player):
 
         # Priority 3: Handle returning to discovery position after catching animal
         if self.state == "returning_to_discovery":
-
-
 
             if self.discovery_position is not None:
                 disc_x, disc_y = self.discovery_position
