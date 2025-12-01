@@ -26,13 +26,7 @@ class Animal:
         return Animal(self.species_id, Gender.Unknown)
 
     def _id_to_letter(self) -> str:
-        try:
-            ch = chr(self.species_id + ord("a"))
-            if not ch.isascii() or not ch.isprintable():
-                raise ValueError
-            return ch
-        except Exception:
-            return "?"
+        return chr(self.species_id + ord("a"))
 
     def _gender_to_color(self) -> tuple[int, int, int]:
         match self.gender:
@@ -46,7 +40,15 @@ class Animal:
     def draw(
         self, screen: pygame.Surface, font: pygame.font.Font, pos: tuple[int, int]
     ):
-        text = font.render(self._id_to_letter(), False, self._gender_to_color())
+        ch = "?"
+        try:
+            ch = self._id_to_letter()
+            if not ch.isascii() or not ch.isprintable():
+                raise ValueError
+        except Exception:
+            ch = "?"
+
+        text = font.render(ch, False, self._gender_to_color())
         rect = text.get_rect(center=pos)
         screen.blit(text, rect)
 
