@@ -245,7 +245,7 @@ class IndependentPlayer(Player):
 
         # if the flock is full (commented right now, because the flock is rarely full)
         # and the helper sees common animals but the ark doesn't have them, it can broadcast to tell other helpers to avoid the area
-        # return: helper's ID 
+        # return: helper's ID
         # TODO in get_action: other helpers move away
         return_self_value = 0
         common_animal_count = 0
@@ -256,18 +256,20 @@ class IndependentPlayer(Player):
         for animal in self.species_populations:
             count_populations += self.species_populations[animal]
             count += 1
-        mean_population = count_populations / count 
+        mean_population = count_populations / count
 
-        #if self.is_flock_full:
-        for animal in cell_view.animals: 
-            if self.species_populations[str(animal._id_to_letter())] > mean_population: # common animal
+        # if self.is_flock_full:
+        for animal in cell_view.animals:
+            if (
+                self.species_populations[str(animal._id_to_letter())] > mean_population
+            ):  # common animal
                 common_animal_count += 1
 
-        if common_animal_count > 0: # 0 for now
+        if common_animal_count > 0:  # 0 for now
             return_self_value = self.id
 
         return return_self_value
-        
+
         # Return message (0 = no message used)
         # Return message (0 = no message used)
         return 0
@@ -411,7 +413,6 @@ class IndependentPlayer(Player):
 
         # Priority 3: Handle returning to discovery position after catching animal
         if self.state == "returning_to_discovery":
-
             if self.discovery_position is not None:
                 disc_x, disc_y = self.discovery_position
                 # Check if we've reached the discovery position
@@ -608,7 +609,6 @@ class IndependentPlayer(Player):
             return True
 
     def _explore(self, snapshot: HelperSurroundingsSnapshot, messages) -> Action | None:
-
         # if a helper is messaging their ID, find their current location and save to move away from it later, in progress
         helper_msg = []
 
@@ -616,8 +616,7 @@ class IndependentPlayer(Player):
             for cell_view in snapshot.sight:
                 for helper in cell_view.helpers:
                     if helper.id == message.contents and helper.id != 0:
-                        helper_msg.append(helper)                        
-
+                        helper_msg.append(helper)
 
         """Explore outward along current heading"""
         # Check if we should return to ark (already checked in get_action, but double-check here)
