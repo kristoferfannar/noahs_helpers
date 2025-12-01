@@ -8,14 +8,15 @@ The simulation can be configured using a variety of command-line arguments.
 
 #### General Options
 
-| Argument     | Default      | Description                                                                                                                                     |
-| :----------- | :----------- | :---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--gui`      | `False`      | Launches the graphical user interface to visualize the simulation. If omitted, the simulation runs in the command line and outputs a JSON blob. |
-| `-T`         | `No default` | Sets the total number of turns to run the simulation for.                                                                                       |
-| `--map_path` | `No default` | Specify num_helpers, animal populations and Ark position in a json file. Must be under `maps/`.                                                 |
-| `--player`   | `r`          | Specify the player to run, either `r` for random or `1-10` for a group.                                                                         |
-| `--ark`      | `No default` | Specify the ark position as two numbers in the form of `X Y`.                                                                                   |
-| `--seed`     | `No default` | Provides a seed for the random number generator to ensure reproducible simulations.                                                             |
+| Argument        | Default      | Description                                                                                                                                     |
+| :-------------- | :----------- | :---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--gui`         | `False`      | Launches the graphical user interface to visualize the simulation. If omitted, the simulation runs in the command line and outputs a JSON blob. |
+| `-T`            | `No default` | Sets the total number of turns to run the simulation for.                                                                                       |
+| `--map_path`    | `No default` | Specify num_helpers, animal populations and Ark position in a json file. Must be under `maps/`.                                                 |
+| `--player`      | `r`          | Specify the player to run, either `r` for random or `1-10` for a group.                                                                         |
+| `--ark`         | `No default` | Specify the ark position as two numbers in the form of `X Y`.                                                                                   |
+| `--num_helpers` | `No default` | Specify the number of helpers, min 2.                                                                                   |
+| `--seed`        | `No default` | Provides a seed for the random number generator to ensure reproducible simulations.                                                             |
 
 ### Code Quality and Formatting
 
