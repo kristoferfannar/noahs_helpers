@@ -263,7 +263,7 @@ class IndependentPlayer(Player):
             if self.species_populations[str(animal._id_to_letter())] > mean_population: # common animal
                 common_animal_count += 1
 
-        if common_animal_count > 1: # 1 for now
+        if common_animal_count > 0: # 0 for now
             return_self_value = self.id
 
         return return_self_value
@@ -609,14 +609,14 @@ class IndependentPlayer(Player):
 
     def _explore(self, snapshot: HelperSurroundingsSnapshot, messages) -> Action | None:
 
-
-        eliminated_directions = []
+        # if a helper is messaging their ID, find their current location and save to move away from it later, in progress
+        helper_msg = []
 
         for message in messages:
             for cell_view in snapshot.sight:
                 for helper in cell_view.helpers:
-                    if helper.id == message.contents:
-                        eliminated_directions.append([cell_view.x, cell_view.y])
+                    if helper.id == message.contents and helper.id != 0:
+                        helper_msg.append(helper)                        
 
 
         """Explore outward along current heading"""
@@ -654,6 +654,13 @@ class IndependentPlayer(Player):
 
         target_x = target_x_clamped
         target_y = target_y_clamped
+
+        # if helper_msg != []:
+        #     for location in helper_msg:
+        #         if location[0] == target_x and location[1] == target_y:
+        #             print("received helper message")
+        #             target_x = max(0, min(c.X - 1, target_x))
+        #             target_y = max(0, min(c.Y - 1, target_y))
 
         # Check distance constraints - ensure we can always return safely
         # According to algorithm: "A helper must never go beyond the distance that requires
