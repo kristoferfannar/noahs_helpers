@@ -14,4 +14,4 @@ class HelperSurroundingsSnapshot:
     sight: Sight
     flock: set[Animal]
     ark_view: ArkView | None
-    timer: Timer
+    timer: Timer # This is how you ensure your players dont take too long
