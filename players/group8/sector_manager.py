@@ -205,7 +205,14 @@ class SectorManager:
         overlap = sector_span * SECTOR_OVERLAP_PERCENT
 
         self.sector_start_angle = (start_angle - overlap) % (2 * pi)
-        self.sector_end_angle = (end_angle + overlap) % (2 * pi)
+        # Handle end_angle = 2*pi case don't mod it, keep it as 2*pi
+        if abs(end_angle - 2 * pi) < 0.0001:
+            self.sector_end_angle = 2 * pi
+        else:
+            self.sector_end_angle = (end_angle + overlap) % (2 * pi)
+            # If mod wrapped around to 0, it means we went past 2*pi, so set to 2*pi
+            if self.sector_end_angle < self.sector_start_angle and abs(self.sector_end_angle) < 0.0001:
+                self.sector_end_angle = 2 * pi
 
     def is_in_sector(self, x: float, y: float) -> bool:
         """Check if a point is in this helper's sector."""
@@ -236,19 +243,25 @@ class SectorManager:
         min_y = max(0, ark_y - max_radius_int)
         max_y = min(c.Y - 1, ark_y + max_radius_int)
 
-        # Check each cell
+        # Pre-compute squared radius to avoid sqrt in loop
+        max_radius_sq = MAX_SEARCH_RADIUS * MAX_SEARCH_RADIUS
+
+        # Check each cell - optimized with early distance check
         for x in range(min_x, max_x + 1):
             for y in range(min_y, max_y + 1):
-                # Check if cell center is within max_search_radius
+                # Fast distance check using squared distance (avoid sqrt)
                 cell_center_x = x + 0.5
                 cell_center_y = y + 0.5
                 dx = cell_center_x - ark_x
                 dy = cell_center_y - ark_y
-                dist = sqrt(dx * dx + dy * dy)
+                dist_sq = dx * dx + dy * dy
 
-                if dist <= MAX_SEARCH_RADIUS and self.is_in_sector(
-                    cell_center_x, cell_center_y
-                ):
+                # Early exit if outside radius
+                if dist_sq > max_radius_sq:
+                    continue
+
+                # Only check sector if within radius
+                if self.is_in_sector(cell_center_x, cell_center_y):
                     cells.append((x, y))
 
         self._sector_cells = cells
