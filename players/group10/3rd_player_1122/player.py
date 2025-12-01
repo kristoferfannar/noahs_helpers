@@ -236,8 +236,6 @@ class IndependentPlayer(Player):
 
         self.forced_return = forced_due_time
 
-        current_turn = self.current_snapshot.time_elapsed
-
         cell_x = int(current_x)
         cell_y = int(current_y)
 
