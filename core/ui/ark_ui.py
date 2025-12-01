@@ -65,6 +65,8 @@ class ArkUI:
         # tracks the time the past x turns have taken
         self.times = deque(maxlen=50)
 
+        self.selected_animals: set[str] = set()
+
     def coords_fit_in_grid(self, x: float, y: float) -> bool:
         west_x, east_x, north_y, south_y = self.get_w_e_n_s()
 
@@ -349,7 +351,13 @@ class ArkUI:
     def draw_animals_on_map(self):
         for animal, cell in self.engine.animals.items():
             animal_center = self.map_coords_to_px(cell.x, cell.y)
-            animal.draw_on_map(self.screen, animal_center)
+
+            if animal._id_to_letter() in self.selected_animals:
+                animal.draw_on_map(
+                    self.screen, animal_center, animal._gender_to_color(), size=4
+                )
+            else:
+                animal.draw_on_map(self.screen, animal_center, c.UNKNOWN_ANIMAL_COLOR)
 
     def draw_animals(self):
         for animal, placed in self.engine.animals.items():
@@ -658,7 +666,8 @@ class ArkUI:
         """Handle pygame events."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (
-                event.type == pygame.KEYDOWN and event.key == pygame.K_q
+                False
+                # event.type == pygame.KEYDOWN and event.key == pygame.K_q
             ):
                 self.running = False
 
@@ -676,8 +685,17 @@ class ArkUI:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     self.paused = not self.paused
-                elif event.key == pygame.K_d:
+
+                elif event.key == pygame.K_COMMA:
                     self.debug_mode = not self.debug_mode
+
+                elif pygame.K_a <= event.key <= pygame.K_z:
+                    letter = chr(event.key - pygame.K_a + ord("a"))
+
+                    if letter in self.selected_animals:
+                        self.selected_animals.remove(letter)
+                    else:
+                        self.selected_animals.add(letter)
 
                 elif event.key == pygame.K_RIGHT:
                     sel_row, sel_col = self.selected_cell
