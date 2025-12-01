@@ -16,6 +16,8 @@ from .sector_manager import SectorManager
 # Constants
 TARGET_REACHED_DELTA = 5.0
 RAIN_COUNTDOWN_START = 990
+RAIN_DISTANCE_MARGIN = 20.0
+MAX_RAIN_RANDOM_ATTEMPTS = 20
 CHECKED_ANIMAL_RADIUS = 3
 CHECKED_ANIMAL_EXPIRY_TURNS = 50
 MAX_RECENT_UPDATES = 4
@@ -28,6 +30,10 @@ RELEASE_DISTANCE_FROM_ARK = 50.0
 NO_ANIMAL_ADDED_RETURN_TURNS = 500
 SWEEP_RING_STEP_KM = 10.0
 SWEEP_ARC_SPACING_KM = 10.0
+RAIN_AGGRESSIVE_SWEEP_STEP_MULTIPLIER = (
+    1.5  # Increase step size during rain when time allows
+)
+RAIN_AGGRESSIVE_SWEEP_THRESHOLD = 500  # Use aggressive step when rain_countdown > this
 REVISIT_COOLDOWN_TURNS = 600
 RANDOM_TARGET_PROBABILITY = 0.5
 
@@ -401,9 +407,21 @@ class Player8(Player):
         dist = distance(*self.position, *self.target_position)
         return dist <= TARGET_REACHED_DELTA
 
+    def _effective_sweep_ring_step(self) -> float:
+        """Get the effective sweep ring step, larger during rain when time allows."""
+        step = SWEEP_RING_STEP_KM
+        if (
+            self.is_raining
+            and self.rain_countdown is not None
+            and self.rain_countdown > RAIN_AGGRESSIVE_SWEEP_THRESHOLD
+        ):
+            step *= RAIN_AGGRESSIVE_SWEEP_STEP_MULTIPLIER
+        return step
+
     def _reset_sweep_ring(self):
         """Prepare sweep parameters for the current ring."""
-        r = max(0.0, self._sweep_ring_index * SWEEP_RING_STEP_KM)
+        step = self._effective_sweep_ring_step()
+        r = max(0.0, self._sweep_ring_index * step)
         # Ensure at least a handful of points even for small r
         if r < 1e-6:
             self._sweep_points_in_ring = 8
@@ -421,7 +439,29 @@ class Player8(Player):
     def _get_random_target(self) -> tuple[float, float]:
         """Pick a random target in sector, excluding recently seen cells."""
         recently_seen = self._recently_seen_set()
-        return self.sector_manager.get_random_position_in_sector(recently_seen)
+        pos = self.sector_manager.get_random_position_in_sector(recently_seen)
+
+        # When raining, avoid selecting cells that would not allow a safe return.
+        if not self.is_raining or self.rain_countdown is None:
+            return pos
+
+        safe_limit = self.rain_countdown - RAIN_DISTANCE_MARGIN
+        if safe_limit <= 0:
+            return (float(self.ark_position[0]), float(self.ark_position[1]))
+
+        attempts = 0
+        while attempts < MAX_RAIN_RANDOM_ATTEMPTS:
+            if distance(*pos, *self.ark_position) <= safe_limit:
+                return pos
+            # Temporarily treat this cell as "recently seen" to avoid reselecting it
+            xcell = int(pos[0])
+            ycell = int(pos[1])
+            recently_seen.add((xcell, ycell))
+            pos = self.sector_manager.get_random_position_in_sector(recently_seen)
+            attempts += 1
+
+        # Fallback to ark position if we fail to find a safe random target
+        return (float(self.ark_position[0]), float(self.ark_position[1]))
 
     def _get_next_sweep_target(self) -> tuple[float, float]:
         """
@@ -430,9 +470,10 @@ class Player8(Player):
         """
         max_attempts = 5000
         attempts = 0
+        step = self._effective_sweep_ring_step()
         while attempts < max_attempts:
             attempts += 1
-            r = max(0.0, self._sweep_ring_index * SWEEP_RING_STEP_KM)
+            r = max(0.0, self._sweep_ring_index * step)
             # Compute angle for this step
             denom = max(1, self._sweep_points_in_ring)
             angle = (2.0 * pi) * (self._sweep_angle_index / denom)
@@ -452,6 +493,11 @@ class Player8(Player):
             # Sector check using cell center
             cx = float(xcell) + 0.5
             cy = float(ycell) + 0.5
+            # During rain, only consider cells that are safely reachable back to the ark
+            if self.is_raining and self.rain_countdown is not None:
+                dist_ark = distance(cx, cy, *self.ark_position)
+                if dist_ark + RAIN_DISTANCE_MARGIN > self.rain_countdown:
+                    continue
             if not self.sector_manager.is_in_sector(cx, cy):
                 continue
             # Cooldown: skip if recently seen
@@ -463,6 +509,10 @@ class Player8(Player):
 
     def _choose_next_target(self) -> tuple[float, float]:
         """Mix between sweep and random targets to balance coverage and exploration."""
+        # During rain, prefer targets that are safely returnable; sweep handles safety.
+        if self.is_raining:
+            return self._get_next_sweep_target()
+
         if random() < RANDOM_TARGET_PROBABILITY:
             self._target_was_random = True
             return self._get_random_target()
