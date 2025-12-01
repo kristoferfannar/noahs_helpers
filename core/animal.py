@@ -26,7 +26,13 @@ class Animal:
         return Animal(self.species_id, Gender.Unknown)
 
     def _id_to_letter(self) -> str:
-        return chr(self.species_id + ord("a"))
+        try:
+            ch = chr(self.species_id + ord("a"))
+            if not ch.isascii() or not ch.isprintable():
+                raise ValueError
+            return ch
+        except Exception:
+            return "?"
 
     def _gender_to_color(self) -> tuple[int, int, int]:
         match self.gender:
@@ -44,7 +50,13 @@ class Animal:
         rect = text.get_rect(center=pos)
         screen.blit(text, rect)
 
-    def draw_on_map(self, screen: pygame.Surface, pos: tuple[int, int], color: tuple[int, int, int] | None = None, size: int = 2):
+    def draw_on_map(
+        self,
+        screen: pygame.Surface,
+        pos: tuple[int, int],
+        color: tuple[int, int, int] | None = None,
+        size: int = 2,
+    ):
         if color is None:
             color = self._gender_to_color()
         pygame.draw.circle(screen, color, pos, size)
