@@ -41,12 +41,14 @@ class SectorManager:
 
         # Cache for sector cells (per-helper instance cache)
         self._sector_cells: list[tuple[int, int]] | None = None
-        
+
         # Class-level cache: same sector boundaries = same cells
         # Key: (sector_start_angle, sector_end_angle, ark_x, ark_y)
         # This allows helpers with identical sectors to share the cell list
-        if not hasattr(SectorManager, '_sector_cells_cache'):
-            SectorManager._sector_cells_cache: dict[tuple[float, float, int, int], list[tuple[int, int]]] = {}
+        if not hasattr(SectorManager, "_sector_cells_cache"):
+            SectorManager._sector_cells_cache: dict[
+                tuple[float, float, int, int], list[tuple[int, int]]
+            ] = {}
 
     def _max_radius_at_angle(self, angle: float, radius: float | None = None) -> float:
         """Calculate the maximum radius at a given angle such that the point stays within grid bounds."""
@@ -231,7 +233,10 @@ class SectorManager:
         else:
             self.sector_end_angle = (end_angle + overlap) % (2 * pi)
             # If mod wrapped around to 0, it means we went past 2*pi, so set to 2*pi
-            if self.sector_end_angle < self.sector_start_angle and abs(self.sector_end_angle) < 0.0001:
+            if (
+                self.sector_end_angle < self.sector_start_angle
+                and abs(self.sector_end_angle) < 0.0001
+            ):
                 self.sector_end_angle = 2 * pi
 
     def is_in_sector(self, x: float, y: float) -> bool:
@@ -265,7 +270,7 @@ class SectorManager:
             ark_x,
             ark_y,
         )
-        
+
         if cache_key in SectorManager._sector_cells_cache:
             self._sector_cells = SectorManager._sector_cells_cache[cache_key]
             return self._sector_cells
@@ -324,7 +329,7 @@ class SectorManager:
             visited_cells = set()
 
         ark_x, ark_y = self.ark_position
-        
+
         # Use polar sampling instead of scanning all cells - much faster!
         # Sample random angle within sector and random radius
         for attempt in range(POSITION_GENERATION_ATTEMPTS):
@@ -339,29 +344,29 @@ class SectorManager:
                     angle = self.sector_start_angle + rand
                 else:
                     angle = rand - (2 * pi - self.sector_start_angle)
-            
+
             # Sample radius (use sqrt for uniform distribution in area)
             max_r = min(MAX_SEARCH_RADIUS, self._max_radius_at_angle(angle))
             if max_r <= 0:
                 continue
             r = sqrt(uniform(0, max_r * max_r))  # sqrt for uniform area distribution
-            
+
             # Convert to cartesian
             x = ark_x + r * cos(angle)
             y = ark_y + r * sin(angle)
-            
+
             # Clamp to grid bounds
             xcell = max(0, min(c.X - 1, int(x)))
             ycell = max(0, min(c.Y - 1, int(y)))
-            
+
             # Check if visited
             if (xcell, ycell) in visited_cells:
                 continue
-            
+
             # Verify it's actually in sector (handles edge cases)
             if self.is_in_sector(float(xcell) + 0.5, float(ycell) + 0.5):
                 return (float(xcell) + 0.5, float(ycell) + 0.5)
-        
+
         # Fallback: return ark position if we couldn't find a valid position
         return (
             float(self.ark_position[0]) + 0.5,

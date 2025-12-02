@@ -460,7 +460,9 @@ class Player8(Player):
 
         # Compute and cache
         cutoff = self.current_turn - REVISIT_COOLDOWN_TURNS
-        self._cached_recently_seen = {cell for cell, t in self.last_seen.items() if t > cutoff}
+        self._cached_recently_seen = {
+            cell for cell, t in self.last_seen.items() if t > cutoff
+        }
         self._cached_recently_seen_turn = self.current_turn
         return self._cached_recently_seen
 
@@ -480,22 +482,22 @@ class Player8(Player):
         """
         recently_seen = self._recently_seen_set()
         ark_x, ark_y = self.ark_position
-        
+
         # Use fast polar sampling instead of scanning all cells
         # Sample up to 200 candidate positions
         candidates: list[tuple[int, int]] = []
         max_samples = 200
-        
+
         for _ in range(max_samples * 2):  # Try more to account for visited cells
             if len(candidates) >= max_samples:
                 break
-                
+
             # Sample random position in sector using polar coordinates
             pos = self.sector_manager.get_random_position_in_sector(recently_seen)
             xcell = int(pos[0])
             ycell = int(pos[1])
             cell = (xcell, ycell)
-            
+
             # Check if unvisited
             if cell not in self.visited_cells and cell not in recently_seen:
                 if cell not in candidates:
@@ -829,7 +831,7 @@ class Player8(Player):
         was_raining = self.is_raining
         self.is_raining = snapshot.is_raining
         self.current_turn = snapshot.time_elapsed
-        
+
         # Store timer to check in get_action for expensive operations
         self._current_timer = snapshot.timer
 
@@ -924,7 +926,7 @@ class Player8(Player):
             self._set_next_target()
         elif self._has_reached_target():
             self._set_next_target()
-    
+
     def _ensure_target_set(self):
         """Ensure target is set (lazy initialization)."""
         if self.target_position is None:
