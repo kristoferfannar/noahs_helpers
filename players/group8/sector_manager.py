@@ -17,6 +17,11 @@ POSITION_GENERATION_ATTEMPTS = 100
 class SectorManager:
     """Manages sector calculation and position generation for helpers."""
 
+    # Cache of equal-area sector boundaries so that for a given configuration
+    # (ark position, number of helpers) we only perform the expensive
+    # numerical integration once, even if there are many helpers.
+    _boundaries_cache: dict[tuple[int, int, int], list[float]] = {}
+
     def __init__(
         self,
         ark_position: tuple[int, int],
@@ -126,6 +131,14 @@ class SectorManager:
         if num_sectors == 0:
             return [0, 2 * pi]
 
+        # Use a class-level cache keyed by (num_sectors, ark_x, ark_y) so that
+        # for a given map/ark configuration we only pay the integration cost
+        # once, regardless of how many helpers we have.
+        ark_x, ark_y = self.ark_position
+        cache_key = (num_sectors, int(ark_x), int(ark_y))
+        if cache_key in SectorManager._boundaries_cache:
+            return SectorManager._boundaries_cache[cache_key]
+
         total_area = self._calculate_sector_area(0, 2 * pi, radius)
         target_area_per_sector = total_area / num_sectors
 
@@ -170,6 +183,7 @@ class SectorManager:
         else:
             boundaries[-1] = 2 * pi
 
+        SectorManager._boundaries_cache[cache_key] = boundaries
         return boundaries
 
     def _initialize_sector(self):
