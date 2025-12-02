@@ -474,43 +474,43 @@ class Player8(Player):
         )
 
     def _get_unvisited_cells_in_sector(self) -> list[tuple[int, int]]:
-        """Get unvisited cells in this helper's sector, prioritizing far/edge cells."""
-        sector_cells = self.sector_manager._get_all_cells_in_sector()
+        """
+        Get unvisited cells in this helper's sector using fast sampling.
+        Avoids expensive full-grid scan by sampling random positions.
+        """
         recently_seen = self._recently_seen_set()
+        ark_x, ark_y = self.ark_position
+        
+        # Use fast polar sampling instead of scanning all cells
+        # Sample up to 200 candidate positions
+        candidates: list[tuple[int, int]] = []
+        max_samples = 200
+        
+        for _ in range(max_samples * 2):  # Try more to account for visited cells
+            if len(candidates) >= max_samples:
+                break
+                
+            # Sample random position in sector using polar coordinates
+            pos = self.sector_manager.get_random_position_in_sector(recently_seen)
+            xcell = int(pos[0])
+            ycell = int(pos[1])
+            cell = (xcell, ycell)
+            
+            # Check if unvisited
+            if cell not in self.visited_cells and cell not in recently_seen:
+                if cell not in candidates:
+                    candidates.append(cell)
 
-        # Limit processing early to avoid slowdown - sample if too many cells
-        max_cells_to_check = 200  # Reduced for faster computation
-        if len(sector_cells) > max_cells_to_check:
-            sector_cells = sample(sector_cells, max_cells_to_check)
-
-        unvisited = [
-            cell
-            for cell in sector_cells
-            if cell not in self.visited_cells and cell not in recently_seen
-        ]
-
-        # Early return if no unvisited cells or very few
-        if len(unvisited) == 0:
+        if len(candidates) == 0:
             return []
-        if len(unvisited) <= 10:
-            # For small lists, just return them sorted by distance
-            ark_x, ark_y = self.ark_position
-            unvisited_with_dist = [
-                (cell, abs(cell[0] - ark_x) + abs(cell[1] - ark_y))
-                for cell in unvisited
-            ]
-            unvisited_with_dist.sort(key=lambda x: -x[1])
-            return [cell for cell, _ in unvisited_with_dist]
 
         # Prioritize cells FAR from ark (push outward) and edge/corner cells
-        # Calculate rough distance for all unvisited to prioritize far ones
-        ark_x, ark_y = self.ark_position
         unvisited_with_rough_dist = [
             (
                 cell,
                 abs(cell[0] - ark_x) + abs(cell[1] - ark_y),
             )  # Manhattan distance (faster)
-            for cell in unvisited
+            for cell in candidates
         ]
         # Sort by distance (farthest first) - this pushes exploration outward
         unvisited_with_rough_dist.sort(key=lambda x: -x[1])
@@ -528,104 +528,21 @@ class Player8(Player):
 
     def _get_coverage_priority_target(self) -> tuple[float, float] | None:
         """Get a target from unvisited cells in sector, prioritizing coverage."""
+        # Use fast sampling - already optimized in _get_unvisited_cells_in_sector
         unvisited = self._get_unvisited_cells_in_sector()
         if not unvisited:
             return None
 
-        # Fast path: limit to small sample and only calculate distance for those
-        # This avoids expensive distance calculations and sorting for all cells
-        sample_size = min(50, len(unvisited))
-        candidates = (
-            sample(unvisited, sample_size)
-            if len(unvisited) > sample_size
-            else unvisited
-        )
-
-        # Separate edge and non-edge quickly
-        edge_candidates = [c for c in candidates if self._is_edge_cell(c[0], c[1])]
-        non_edge_candidates = [
-            c for c in candidates if not self._is_edge_cell(c[0], c[1])
-        ]
-
-        # Prefer edge cells, calculate distance only for small subset
+        # Simple selection: prefer edge cells, then pick from top candidates
+        edge_candidates = [c for c in unvisited if self._is_edge_cell(c[0], c[1])]
         if edge_candidates:
-            # Only calculate distance for edge cells (max 20)
-            edge_sample = (
-                edge_candidates[:20] if len(edge_candidates) > 20 else edge_candidates
-            )
-            edge_with_dist = [
-                (cell, distance(cell[0] + 0.5, cell[1] + 0.5, *self.ark_position))
-                for cell in edge_sample
-            ]
-            # Simple sort by distance (farthest first)
-            edge_with_dist.sort(key=lambda x: -x[1])
-            # Pick from top 5 farthest edge cells
-            top_edge = edge_with_dist[: min(5, len(edge_with_dist))]
-            if top_edge:
-                cell, _ = top_edge[int(random() * len(top_edge))]
-                return (float(cell[0]) + 0.5, float(cell[1]) + 0.5)
-
-        # Fallback: random from non-edge or all if no edge
-        fallback = non_edge_candidates if non_edge_candidates else candidates
-        if fallback:
-            cell = fallback[int(random() * len(fallback))]
+            # Pick random from edge cells (already sorted by distance)
+            cell = edge_candidates[int(random() * min(10, len(edge_candidates)))]
             return (float(cell[0]) + 0.5, float(cell[1]) + 0.5)
 
-        return None
-
-    def _is_edge_cell(self, x: int, y: int) -> bool:
-        """Check if a cell is near the map edge (corner/edge area)."""
-        return (
-            x < EDGE_DISTANCE_THRESHOLD
-            or x >= c.X - EDGE_DISTANCE_THRESHOLD
-            or y < EDGE_DISTANCE_THRESHOLD
-            or y >= c.Y - EDGE_DISTANCE_THRESHOLD
-        )
-
-    def _get_unvisited_cells_in_sector(self) -> list[tuple[int, int]]:
-        """Get unvisited cells in this helper's sector, prioritizing edge/corner cells."""
-        sector_cells = self.sector_manager._get_all_cells_in_sector()
-        unvisited = [
-            cell
-            for cell in sector_cells
-            if cell not in self.visited_cells and cell not in self._recently_seen_set()
-        ]
-
-        # Prioritize edge/corner cells
-        edge_cells = [
-            cell for cell in unvisited if self._is_edge_cell(cell[0], cell[1])
-        ]
-        non_edge_cells = [
-            cell for cell in unvisited if not self._is_edge_cell(cell[0], cell[1])
-        ]
-
-        # Return edge cells first, then others
-        return edge_cells + non_edge_cells
-
-    def _get_coverage_priority_target(self) -> tuple[float, float] | None:
-        """Get a target from unvisited cells in sector, prioritizing coverage."""
-        unvisited = self._get_unvisited_cells_in_sector()
-        if not unvisited:
-            return None
-
-        # Prefer cells that are far from ark (explore outward)
-        unvisited_with_dist = [
-            (cell, distance(cell[0] + 0.5, cell[1] + 0.5, *self.ark_position))
-            for cell in unvisited
-        ]
-        # Sort by distance (farther = higher priority) but also consider edge priority
-        unvisited_with_dist.sort(
-            key=lambda x: (
-                0 if self._is_edge_cell(x[0][0], x[0][1]) else 1,  # Edge cells first
-                -x[1],  # Then by distance (negative for descending)
-            )
-        )
-
-        # Pick from top candidates (top 20% or at least top 5)
-        top_n = max(5, len(unvisited_with_dist) // 5)
-        selected = unvisited_with_dist[:top_n]
-        if selected:
-            cell, _ = selected[int(random() * len(selected))]
+        # Fallback: pick from non-edge
+        if unvisited:
+            cell = unvisited[int(random() * min(10, len(unvisited)))]
             return (float(cell[0]) + 0.5, float(cell[1]) + 0.5)
 
         return None
@@ -762,10 +679,17 @@ class Player8(Player):
             return self._get_next_sweep_target()
 
         # When there's time and we want better coverage, prioritize unvisited cells
+        # Skip if timer shows we're running low on time (expensive operation)
+        timer_ok = (
+            not hasattr(self, "_current_timer")
+            or self._current_timer is None
+            or self._current_timer.consumed < 0.001  # Less than 1ms consumed so far
+        )
         if (
             not self.is_raining
             and self.current_turn > COVERAGE_PRIORITY_TURN
             and random() < COVERAGE_RANDOM_PROBABILITY
+            and timer_ok  # Only do expensive coverage if we have time
         ):
             coverage_target = self._get_coverage_priority_target()
             if coverage_target is not None:
@@ -905,6 +829,9 @@ class Player8(Player):
         was_raining = self.is_raining
         self.is_raining = snapshot.is_raining
         self.current_turn = snapshot.time_elapsed
+        
+        # Store timer to check in get_action for expensive operations
+        self._current_timer = snapshot.timer
 
         # Check if flock size increased (animal was added)
         current_flock_size = len(self.flock)
