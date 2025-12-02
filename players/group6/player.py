@@ -142,8 +142,7 @@ class Player6(Player):
         self._species_id_populations: dict[int, int] = {}
         for species_name, pop in species_populations.items():
             species_id = self._extract_species_id(species_name)
-            if species_id is not None:
-                self._species_id_populations[species_id] = pop
+            self._species_id_populations[species_id] = pop
 
         # Deterministically map the 64 rarest species to IDs 0-63
         sorted_species = sorted(
@@ -222,19 +221,14 @@ class Player6(Player):
         _, (col, row) = self._encode_cluster(tx, ty)
         return (animal.species_id, col, row)
 
-    def _extract_species_id(self, species_name) -> int | None:
-        """Extract species_id from species name."""
-        if isinstance(species_name, int):
-            return species_name
-        elif len(species_name) == 1 and species_name.isalpha():
-            return ord(species_name.lower()) - ord("a")
-        elif "_" in species_name:
-            return int(species_name.split("_")[-1])
-        else:
-            try:
-                return int(species_name)
-            except ValueError:
-                return None
+    def _extract_species_id(self, species_name: str) -> int:
+        """Extract species_id from species name.
+        
+        Species names are single lowercase letters ('a', 'b', 'c', ...).
+        Species IDs are integers (0, 1, 2, ...).
+        """
+        # species_name is a single character like 'a', 'b', etc.
+        return ord(species_name) - ord("a")
 
     def _encode_cluster(self, x: float, y: float) -> tuple[int, tuple[int, int]]:
         """Quantize (x, y) position into a 7-bit cluster id (16x8 grid)."""
