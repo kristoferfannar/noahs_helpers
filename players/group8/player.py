@@ -573,6 +573,63 @@ class Player8(Player):
 
         return None
 
+    def _is_edge_cell(self, x: int, y: int) -> bool:
+        """Check if a cell is near the map edge (corner/edge area)."""
+        return (
+            x < EDGE_DISTANCE_THRESHOLD
+            or x >= c.X - EDGE_DISTANCE_THRESHOLD
+            or y < EDGE_DISTANCE_THRESHOLD
+            or y >= c.Y - EDGE_DISTANCE_THRESHOLD
+        )
+
+    def _get_unvisited_cells_in_sector(self) -> list[tuple[int, int]]:
+        """Get unvisited cells in this helper's sector, prioritizing edge/corner cells."""
+        sector_cells = self.sector_manager._get_all_cells_in_sector()
+        unvisited = [
+            cell
+            for cell in sector_cells
+            if cell not in self.visited_cells and cell not in self._recently_seen_set()
+        ]
+
+        # Prioritize edge/corner cells
+        edge_cells = [
+            cell for cell in unvisited if self._is_edge_cell(cell[0], cell[1])
+        ]
+        non_edge_cells = [
+            cell for cell in unvisited if not self._is_edge_cell(cell[0], cell[1])
+        ]
+
+        # Return edge cells first, then others
+        return edge_cells + non_edge_cells
+
+    def _get_coverage_priority_target(self) -> tuple[float, float] | None:
+        """Get a target from unvisited cells in sector, prioritizing coverage."""
+        unvisited = self._get_unvisited_cells_in_sector()
+        if not unvisited:
+            return None
+
+        # Prefer cells that are far from ark (explore outward)
+        unvisited_with_dist = [
+            (cell, distance(cell[0] + 0.5, cell[1] + 0.5, *self.ark_position))
+            for cell in unvisited
+        ]
+        # Sort by distance (farther = higher priority) but also consider edge priority
+        unvisited_with_dist.sort(
+            key=lambda x: (
+                0 if self._is_edge_cell(x[0][0], x[0][1]) else 1,  # Edge cells first
+                -x[1],  # Then by distance (negative for descending)
+            )
+        )
+
+        # Pick from top candidates (top 20% or at least top 5)
+        top_n = max(5, len(unvisited_with_dist) // 5)
+        selected = unvisited_with_dist[:top_n]
+        if selected:
+            cell, _ = selected[int(random() * len(selected))]
+            return (float(cell[0]) + 0.5, float(cell[1]) + 0.5)
+
+        return None
+
     def _get_random_target(self) -> tuple[float, float]:
         """Pick a random target in sector, excluding recently seen cells."""
         recently_seen = self._recently_seen_set()
@@ -600,7 +657,6 @@ class Player8(Player):
             xcell = max(0, min(c.X - 1, int(x)))
             ycell = max(0, min(c.Y - 1, int(y)))
             return (float(xcell) + 0.5, float(ycell) + 0.5)
-
         # When raining, avoid selecting cells that would not allow a safe return.
         if not self.is_raining or self.rain_countdown is None:
             return pos
