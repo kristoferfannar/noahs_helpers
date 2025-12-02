@@ -1,4 +1,4 @@
-from random import choice, random, uniform
+from random import uniform
 from math import cos, sin, pi, atan2, sqrt
 
 import core.constants as c

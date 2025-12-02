@@ -1,4 +1,4 @@
-from random import random, sample
+from random import random
 from math import cos, sin, pi, atan2
 
 from core.action import Action, Move, Obtain, Release
