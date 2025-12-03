@@ -53,7 +53,7 @@ class IndependentPlayer(Player):
         self.current_snapshot = None
         self.forced_return = False
         self.rain_start_turn: int | None = None
-        self.flock_limit: int = 2
+        self.flock_limit: int = int(max(1, min(4, 1+len(species_populations) // num_helpers)))
 
         # Animal hunting state
         self.discovery_position = None  # Position where we discovered the animal
@@ -260,14 +260,15 @@ class IndependentPlayer(Player):
             abs(current_x - self.ark_position[0]) <= c.EPS
             and abs(current_y - self.ark_position[1]) <= c.EPS
         )
+
         dist_ark = hypot(
             current_x - self.ark_position[0], current_y - self.ark_position[1]
         )
 
-        if self.rain_start_turn and dist_ark > 1008 - (
+        if self.rain_start_turn and dist_ark > 997 - (
             self.current_snapshot.time_elapsed - self.rain_start_turn
         ):
-            print("Too far", self.id, dist_ark)
+            return Move(*self.move_towards(*self.ark_position)) # Safeguard
 
         # if(self.current_snapshot.is_raining and (current_y !=  self.ark_position[1] or current_x != self.ark_position[0])):
         #    print(self.id, at_ark, current_x, current_y, self.forced_return)
@@ -514,11 +515,11 @@ class IndependentPlayer(Player):
             # Don't hunt if target is too close to where we recently hunted
             # (avoid getting stuck in hunt-fail-hunt loop at same location)
             if target_cell is not None and self.last_hunt_position is not None:
-                if self.turns_since_last_hunt < 20:  # Within last 20 turns
+                if self.turns_since_last_hunt < 10:  # Within last 20 turns
                     last_x, last_y = self.last_hunt_position
                     target_x, target_y = target_cell
                     distance_to_last = hypot(target_x - last_x, target_y - last_y)
-                    if distance_to_last < 10:  # Within 10 cells of last hunt location
+                    if distance_to_last < 5:  # Within 10 cells of last hunt location
                         target_cell = None  # Skip this hunt
 
             if target_cell is not None:
@@ -560,18 +561,17 @@ class IndependentPlayer(Player):
         # Priority 6: If no animals in sight, continue exploring or returning
         if self.state == "exploring":
             return self._explore(snapshot)
-        elif self.state == "returning":
+        else:
             return self._return_to_ark(snapshot)
 
-        return None
-
     # near edge
-    def _near_edge(self, x: int, y: int, angle: float) -> float:
+    def _near_edge(self, x: float, y: float, angle: float) -> float:
         new_x = x + 2 * cos(radians(angle))
         new_y = y + 2 * sin(radians(angle))
 
         if new_x <= 0 or new_x >= self.w or new_y <= 0 or new_y >= self.h:
             return True
+        return False
 
     def _explore(self, snapshot: HelperSurroundingsSnapshot) -> Action | None:
         """Explore outward along current heading"""
@@ -717,7 +717,7 @@ class IndependentPlayer(Player):
                 target_y = current_y + dy * scale
 
         # Check if we can move to target using the same distance formula as can_move_to
-        if self.can_move_to(target_x, target_y) and self._dist_to_ark(
+        if self.current_snapshot and self.can_move_to(target_x, target_y) and self._dist_to_ark(
             target_x, target_y
         ) < self._get_available_turns(self.current_snapshot):
             return Move(*self.move_towards(target_x, target_y))
@@ -948,7 +948,7 @@ class IndependentPlayer(Player):
         if self.rain_start_turn is not None:
             # Rain has started - we know exactly how much time remains
             turns_since_rain = snapshot.time_elapsed - self.rain_start_turn
-            return max(0, 0.99 * (c.START_RAIN - turns_since_rain))
+            return int(max(0, 0.99 * (c.START_RAIN - turns_since_rain)))
 
         # Rain has not started yet - we don't know when T is
         # Be optimistic and assume we have plenty of time to explore
