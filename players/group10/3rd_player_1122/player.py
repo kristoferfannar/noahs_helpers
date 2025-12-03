@@ -53,7 +53,9 @@ class IndependentPlayer(Player):
         self.current_snapshot = None
         self.forced_return = False
         self.rain_start_turn: int | None = None
-        self.flock_limit: int = int(max(1, min(4, 1+len(species_populations) // num_helpers)))
+        self.flock_limit: int = int(
+            max(1, min(4, 1 + len(species_populations) // num_helpers))
+        )
 
         # Animal hunting state
         self.discovery_position = None  # Position where we discovered the animal
@@ -268,7 +270,7 @@ class IndependentPlayer(Player):
         if self.rain_start_turn and dist_ark > 997 - (
             self.current_snapshot.time_elapsed - self.rain_start_turn
         ):
-            return Move(*self.move_towards(*self.ark_position)) # Safeguard
+            return Move(*self.move_towards(*self.ark_position))  # Safeguard
 
         # if(self.current_snapshot.is_raining and (current_y !=  self.ark_position[1] or current_x != self.ark_position[0])):
         #    print(self.id, at_ark, current_x, current_y, self.forced_return)
@@ -717,9 +719,12 @@ class IndependentPlayer(Player):
                 target_y = current_y + dy * scale
 
         # Check if we can move to target using the same distance formula as can_move_to
-        if self.current_snapshot and self.can_move_to(target_x, target_y) and self._dist_to_ark(
-            target_x, target_y
-        ) < self._get_available_turns(self.current_snapshot):
+        if (
+            self.current_snapshot
+            and self.can_move_to(target_x, target_y)
+            and self._dist_to_ark(target_x, target_y)
+            < self._get_available_turns(self.current_snapshot)
+        ):
             return Move(*self.move_towards(target_x, target_y))
 
         # If normal check failed but we're forced to return, try moving directly anyway
