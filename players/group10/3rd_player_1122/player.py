@@ -238,6 +238,39 @@ class IndependentPlayer(Player):
 
         self.forced_return = forced_due_time
 
+        cell_x = int(current_x)
+        cell_y = int(current_y)
+
+        cell_view = snapshot.sight.get_cellview_at(cell_x, cell_y)
+
+        # if the flock is full (commented right now, because the flock is rarely full)
+        # and the helper sees common animals but the ark doesn't have them, it can broadcast to tell other helpers to avoid the area
+        # return: helper's ID
+        # TODO in get_action: other helpers move away
+        return_self_value = 0
+        common_animal_count = 0
+        mean_population = 0
+        count_populations = 0
+        count = 0
+
+        for animal in self.species_populations:
+            count_populations += self.species_populations[animal]
+            count += 1
+        mean_population = count_populations / count
+
+        # if self.is_flock_full:
+        for animal in cell_view.animals:
+            if (
+                self.species_populations[str(animal._id_to_letter())] > mean_population
+            ):  # common animal
+                common_animal_count += 1
+
+        if common_animal_count > 0:  # 0 for now
+            return_self_value = self.id
+
+        return return_self_value
+
+        # Return message (0 = no message used)
         # Return message (0 = no message used)
         return 0
 
@@ -262,6 +295,34 @@ class IndependentPlayer(Player):
             abs(current_x - self.ark_position[0]) <= c.EPS
             and abs(current_y - self.ark_position[1]) <= c.EPS
         )
+        dist_ark = hypot(
+            current_x - self.ark_position[0], current_y - self.ark_position[1]
+        )
+
+        if self.rain_start_turn and dist_ark > 1008 - (
+            self.current_snapshot.time_elapsed - self.rain_start_turn
+        ):
+            print("Too far", self.id, dist_ark)
+
+        # if(self.current_snapshot.is_raining and (current_y !=  self.ark_position[1] or current_x != self.ark_position[0])):
+        #    print(self.id, at_ark, current_x, current_y, self.forced_return)
+
+        # Priority 0 (HIGHEST): If forced to return due to time, override all other behaviors
+        # This ensures all helpers return to ark before deadline
+        if self.forced_return:
+            # Cancel any hunting state
+            if self.state in ("hunting", "returning_to_discovery"):
+                self.state = "returning"
+                self.target_animal_cell = None
+                self.target_species_id = None
+                self.discovery_position = None
+                self.previous_state = None
+
+            # Force returning state
+            self.state = "returning"
+
+            # Immediately return to ark, no other actions
+            return self._return_to_ark(snapshot)
 
         dist_ark = hypot(
             current_x - self.ark_position[0], current_y - self.ark_position[1]
@@ -409,7 +470,7 @@ class IndependentPlayer(Player):
                         )
                         # Immediately continue with resumed state
                         if self.state == "exploring":
-                            return self._explore(snapshot)
+                            return self._explore(snapshot, messages)
                         elif self.state == "returning":
                             return self._return_to_ark(snapshot)
                 else:
@@ -562,7 +623,7 @@ class IndependentPlayer(Player):
 
         # Priority 6: If no animals in sight, continue exploring or returning
         if self.state == "exploring":
-            return self._explore(snapshot)
+            return self._explore(snapshot, messages)
         else:
             return self._return_to_ark(snapshot)
 
@@ -575,7 +636,16 @@ class IndependentPlayer(Player):
             return True
         return False
 
-    def _explore(self, snapshot: HelperSurroundingsSnapshot) -> Action | None:
+    def _explore(self, snapshot: HelperSurroundingsSnapshot, messages) -> Action | None:
+        # if a helper is messaging their ID, find their current location and save to move away from it later, in progress
+        helper_msg = []
+
+        for message in messages:
+            for cell_view in snapshot.sight:
+                for helper in cell_view.helpers:
+                    if helper.id == message.contents and helper.id != 0:
+                        helper_msg.append(helper)
+
         """Explore outward along current heading"""
         # Check if we should return to ark (already checked in get_action, but double-check here)
         if len(self.flock) >= self.flock_limit or self.is_flock_full():
@@ -611,6 +681,13 @@ class IndependentPlayer(Player):
 
         target_x = target_x_clamped
         target_y = target_y_clamped
+
+        # if helper_msg != []:
+        #     for location in helper_msg:
+        #         if location[0] == target_x and location[1] == target_y:
+        #             print("received helper message")
+        #             target_x = max(0, min(c.X - 1, target_x))
+        #             target_y = max(0, min(c.Y - 1, target_y))
 
         # Check distance constraints - ensure we can always return safely
         # According to algorithm: "A helper must never go beyond the distance that requires
