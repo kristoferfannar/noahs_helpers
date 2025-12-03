@@ -223,7 +223,7 @@ class Player6(Player):
 
     def _extract_species_id(self, species_name: str) -> int:
         """Extract species_id from species name.
-        
+
         Species names are single lowercase letters ('a', 'b', 'c', ...).
         Species IDs are integers (0, 1, 2, ...).
         """
