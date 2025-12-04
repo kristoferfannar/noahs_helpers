@@ -196,7 +196,6 @@ def get_line(header: str, bits: list[list[str]]):
     for h in header.split(DELIM):
         for b in bits:
             if h == b[0]:
-                print(f"found: h={h} == b[0]={b[0]} -> {b[1:]}")
                 line.append(INNER_DELIM.join(b[1:]))
 
     return DELIM.join(line)
