@@ -706,7 +706,7 @@ class Player8(Player):
         timer_ok = (
             not hasattr(self, "_current_timer")
             or self._current_timer is None
-            or self._current_timer.consumed < 0.001  # Less than 1ms consumed so far
+            or self._current_timer._consumed_sec < 0.001  # Less than 1ms consumed so far
         )
         if (
             not self.is_raining

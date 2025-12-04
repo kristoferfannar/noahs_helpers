@@ -79,7 +79,11 @@ class Engine:
         }
 
         # Tracks the total time consumed by the player
-        timer = Timer()
+        timeout = len(self.helpers)
+        if self.time_elapsed == 0:
+            timeout *= 60
+
+        timer = Timer(timeout_sec=timeout)
 
         for hi, helper in self.info_helpers.items():
             sight = Sight((hi.x, hi.y), self.grid)
@@ -99,7 +103,7 @@ class Engine:
             )
             last = perf_counter()
             one_byte_message = helper.check_surroundings(snapshot)
-            timer.consumed += perf_counter() - last
+            timer.add_time(perf_counter() - last)
 
             if not (0 <= one_byte_message < c.ONE_BYTE):
                 raise Exception(
@@ -123,7 +127,7 @@ class Engine:
         for hi, helper in self.info_helpers.items():
             last = perf_counter()
             action = helper.get_action(messages_to[hi])
-            timer.consumed += perf_counter() - last
+            timer.add_time(perf_counter() - last)
 
             if hi.kind == Kind.Noah and action is not None:
                 raise Exception("Noah shouldn't perform an action")
@@ -218,8 +222,8 @@ class Engine:
                         self.animals[animal] = neighbor
 
         self.time_elapsed += 1
-        self.times.append(timer.consumed)
-        return timer.consumed
+        self.times.append(timer.get_time())
+        return timer.get_time()
 
     def get_results(self) -> tuple[int, list[float]]:
         # By the end, all helpers must be in the ark

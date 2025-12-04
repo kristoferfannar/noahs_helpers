@@ -13,13 +13,12 @@ CPU_SECONDS = 5 * 60
 TIMEOUT_ERROR_CODE = 124
 
 TURNS_PER_WEEK = 1008
-DELIM = ";"
-INNER_DELIM = ","
+DELIM = ","
+INNER_DELIM = ";"
 
 
 parameters = [
     {"-T": [f"{2 * TURNS_PER_WEEK}", f"{4 * TURNS_PER_WEEK}", f"{7 * TURNS_PER_WEEK}"]},
-    # {"--player": ["1", "2"]},
     {"--player": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]},
 ]
 
@@ -128,18 +127,11 @@ def combos_as_args(params: list[dict[str, list[str]]]) -> list[list[str]]:
         keys.append(k)
         values.append(vs)
 
-    seed = 10000 - 1
     args: list[list[str]] = []
     for vals in product(*values):
         argv: list[str] = []
         for k, v in zip(keys, vals):
-
-            if k == "--player" and v == "1":
-                seed += 1
-
             argv.extend([k, v])
-
-        argv = ["--seed", f"{seed}"] + argv
 
         args.append(argv)
 
@@ -190,10 +182,10 @@ def arg_to_bits(arg: list[str]) -> list[list[str]]:
 def arg_to_filename(arg: list[str]) -> str:
     filename = ""
 
-    bits = arg_to_bits(arg)
+    for i in range(0, len(arg), 2):
+        k, v = arg[i].strip("-"), arg[i + 1].split(".")[0].split("/")[-1]
 
-    for bit in bits:
-        filename += f"{bit[0]}={'_'.join(bit[1:])}#"
+        filename += f"{k}={v}#"
 
     return f"{filename[:-1]}.log"
 
@@ -204,6 +196,7 @@ def get_line(header: str, bits: list[list[str]]):
     for h in header.split(DELIM):
         for b in bits:
             if h == b[0]:
+                print(f"found: h={h} == b[0]={b[0]} -> {b[1:]}")
                 line.append(INNER_DELIM.join(b[1:]))
 
     return DELIM.join(line)
@@ -222,7 +215,6 @@ def get_score(contents: str):
 
 
 def main():
-    maps = create_maps()
 
     filename = "tournament/results.csv"
     header = DELIM.join(
@@ -230,40 +222,60 @@ def main():
             b[0]
             for b in (
                 arg_to_bits(combos_as_args(parameters)[0])
-                + [["map_path"], ["run_path"], ["score"], ["sec"], ["error"]]
+                + [
+                    ["seed"],
+                    ["map_path"],
+                    ["run_path"],
+                    ["score"],
+                    ["sec"],
+                    ["returncode"],
+                ]
             )
         ]
     )
 
     writeline(filename, header)
 
-    for map in maps[:1]:
-        for arg in combos_as_args(parameters)[:10]:
-            args = ["uv", "run", "main.py"] + arg + ["--map_path", map]
-            print(f"##\n{args}", flush=True)
+    all_args = combos_as_args(parameters)[:20]
+    maps = create_maps()[:2]
+    total = len(maps) * len(all_args)
+
+    seed = 10000 - 1
+
+    for i, map in enumerate(maps):
+        seed += 1
+        for j, _arg in enumerate(all_args):
+            curr = i * len(all_args) + j
+
+            arg = _arg + ["--seed", f"{seed}", "--map_path", map]
+
+            args = ["uv", "run", "main.py"] + arg
+            print(f"{curr}/{total}\n{' '.join(args)}", flush=True)
 
             run_path = f"tournament/runs/{arg_to_filename(arg)}"
 
-            bits = arg_to_bits(arg) + [["map_path", map], ["run_path", run_path]]
+            bits = arg_to_bits(arg) + [
+                ["run_path", run_path],
+            ]
 
             returncode, _, err, cpu_seconds = run_with_timeout(args)
 
             score = get_score(err)
-            bits += [["score", f"{score}"]]
+            bits += [["score", f"{score}"], ["returncode", f"{returncode}"]]
 
             with open(run_path, "w") as f:
                 f.write(err)
 
             if returncode == 0:
-                bits += [["error", "false"], ["sec", f"{cpu_seconds:.4}"]]
+                bits += [["sec", f"{cpu_seconds:.4}"]]
 
                 line = get_line(header, bits)
             elif returncode == TIMEOUT_ERROR_CODE:
-                bits += [["error", "true"], ["sec", "-1"]]
+                bits += [["sec", "-1"]]
                 line = get_line(header, bits)
             else:
-                bits += [["error", "true"], ["sec", "-1"]]
-                print(f"player failed: {err}")
+                bits += [["sec", "-1"]]
+                # print(f"player failed: {err}")
                 line = get_line(header, bits)
 
             writeline(filename, line)
