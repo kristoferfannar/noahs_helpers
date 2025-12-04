@@ -236,8 +236,8 @@ def main():
 
     writeline(filename, header)
 
-    all_args = combos_as_args(parameters)[:20]
-    maps = create_maps()[:2]
+    all_args = combos_as_args(parameters)
+    maps = create_maps()
     total = len(maps) * len(all_args)
 
     seed = 10000 - 1
