@@ -4,9 +4,11 @@ from typing import cast, Protocol
 import os
 from time import time
 import pathlib
+import sys
 
 from core.args import PLAYERS, Args, MapArgs
 from core.player import Player
+from core.utils import eprint
 from players.random_player import RandomPlayer
 
 import core.constants as c
@@ -126,11 +128,16 @@ def get_maps_dir() -> pathlib.Path:
     return pathlib.Path(os.path.curdir + "/maps/").resolve()
 
 
+def get_tournaments_dir() -> pathlib.Path:
+    return pathlib.Path(os.path.curdir + "/tournament/maps/").resolve()
+
+
 def get_map(map: str | None) -> MapArgs | None:
     if map is None:
         return None
 
     map_dir = get_maps_dir()
+    tournaments_dir = get_tournaments_dir()
     map_path = pathlib.Path(map).resolve()
 
     if not map_path.is_file():
@@ -139,9 +146,12 @@ def get_map(map: str | None) -> MapArgs | None:
     try:
         map_path.relative_to(map_dir)
     except ValueError:
-        raise Exception(
-            'provided map path file must be inside "environments/" directory'
-        )
+        try:
+            map_path.relative_to(tournaments_dir)
+        except ValueError:
+            raise Exception(
+                'provided map path file must be inside "maps/" or "tournament/maps" directory'
+            )
 
     return MapArgs.read(map_path)
 

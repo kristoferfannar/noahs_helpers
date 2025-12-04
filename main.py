@@ -2,6 +2,7 @@ import random
 
 from core.runner import ArkRunner
 from core.parse_args import parse_args
+from core.utils import eprint
 
 
 def main():
@@ -15,16 +16,16 @@ def main():
     else:
         score, times = runner.run()
 
-    print("RESULTS")
-    print(f"{'#' * 20}")
-    print(f"SCORE={score}")
+    eprint("RESULTS")
+    eprint(f"{'#' * 20}")
+    eprint(f"SCORE={score}")
     if len(times):
-        print(f"TOTAL_TURN_TIME={sum(times):.4f}s")
-        print(f"TURNS_PER_SECOND={1 / (sum(times) / len(times)):.0f}")
+        eprint(f"TOTAL_TURN_TIME={sum(times):.4f}s")
+        eprint(f"TURNS_PER_SECOND={1 / (sum(times) / len(times)):.0f}")
     else:
-        print("TOTAL_TURN_TIME=-1")
-        print("TURNS_PER_SECOND=-1")
-    print(f"{'#' * 20}")
+        eprint("TOTAL_TURN_TIME=-1")
+        eprint("TURNS_PER_SECOND=-1")
+    eprint(f"{'#' * 20}")
 
 
 if __name__ == "__main__":

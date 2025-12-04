@@ -11,6 +11,7 @@ from core.player_info import PlayerInfo
 from core.sight import Sight
 from core.snapshots import HelperSurroundingsSnapshot
 from core.timer import Timer
+from core.utils import eprint
 from core.views.player_view import Kind
 
 import core.constants as c
@@ -230,5 +231,7 @@ class Engine:
     def run_simulation(self) -> tuple[int, list[float]]:
         while self.time_elapsed < self.time:
             self.run_turn()
+
+            eprint(f"turn={self.time_elapsed},ark_score={self.ark.get_score()}")
 
         return self.get_results()
