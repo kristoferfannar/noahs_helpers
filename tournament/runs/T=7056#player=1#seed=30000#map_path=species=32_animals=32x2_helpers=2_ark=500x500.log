@@ -1,0 +1,23 @@
+Traceback (most recent call last):
+  File "/home/kristoferfannar/new/noahs_helpers_32_animals/main.py", line 32, in <module>
+    main()
+    ~~~~^^
+  File "/home/kristoferfannar/new/noahs_helpers_32_animals/main.py", line 17, in main
+    score, times = runner.run()
+                   ~~~~~~~~~~^^
+  File "/home/kristoferfannar/new/noahs_helpers_32_animals/core/runner.py", line 104, in run
+    engine = self.setup_engine()
+  File "/home/kristoferfannar/new/noahs_helpers_32_animals/core/runner.py", line 76, in setup_engine
+    self.player_class(
+    ~~~~~~~~~~~~~~~~~^
+        id,
+        ^^^
+    ...<3 lines>...
+        species_populations,
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/kristoferfannar/new/noahs_helpers_32_animals/players/group1/player.py", line 114, in __init__
+    self.end_angle = out[0]
+                     ~~~^^^
+IndexError: list index out of range
